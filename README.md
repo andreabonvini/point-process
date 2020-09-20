@@ -1,6 +1,6 @@
-# PPLIB
+# PPLIB - The Point Process Library
 
-This repository contains a Python implementation of the MATLAB software provided by Riccardo Barbieri and Luca Citi at [this](http://users.neurostat.mit.edu/barbieri/pphrv) link.
+This repository contains a `Python` implementation of the `MATLAB` software provided by Riccardo Barbieri and Luca Citi at [this](http://users.neurostat.mit.edu/barbieri/pphrv) link.
 
 ## Development environment:
 
@@ -14,18 +14,25 @@ The development environment follows some best practices to keep code working and
 ### Setup:
 ```bash
 # Run these commands the first time you clone this repository
+
 # Install dependencies
 pipenv install --dev
 
 # Setup pre-commit and pre-push hooks
 pipenv run pre-commit install -t pre-commit
 pipenv run pre-commit install -t pre-push
+
 # -----------------------------------------
 # Run these commands when needed:
+
 # Install new packages
 pipenv install <package-name>
+
 # Update the dependencies
 pipenv sync
+
+# Run bin/*.py script
+pipenv run python bin/*.py
 ```
 
 ### Tests

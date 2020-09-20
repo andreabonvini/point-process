@@ -9,9 +9,9 @@ if __name__ == "__main__":
         "-path",
         type=str,
         help="path to .csv dataset",
-        default="../tests/test_data/Y2.csv",
+        default="tests/test_data/Y2.csv",
     )
     args = parser.parse_args()
     events = load(args.path)
-    events = events[269:299]
-    thetap, kappa, opt = regr_likel(events)
+    events = events[269:285]
+    res = regr_likel(events)

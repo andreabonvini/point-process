@@ -1,12 +1,10 @@
-from typing import List
-
 import numpy as np
 from scipy.linalg import toeplitz
 
 from pp.likelihood import likel_invnorm
 
 
-def regr_likel(events: np.array, opt: dict = None) -> List:
+def regr_likel(events: np.array, opt: dict = None):
     """
 
     @param events: event-times as returned by the pp.utils.load() function
@@ -46,6 +44,8 @@ def regr_likel(events: np.array, opt: dict = None) -> List:
     # wn are the target inter-event intervals, i.e. the intervals we have to predict once we build our
     # RR autoregressive model.
     wn = rr[opt["P"] :]
+    # We prefer to column vector of shape (m,1) instead of row vector of shape (m,)
+    wn = wn.reshape(-1, 1)
 
     # We now have to build a matrix xn s.t. for i = 0, ..., len(rr)-p-1 the i_th element of xn will be
     # xn[i] = [1, rr[i + p - 1], rr[i + p - 2], ..., rr[i]]
@@ -54,15 +54,6 @@ def regr_likel(events: np.array, opt: dict = None) -> List:
     b = rr[opt["P"] - 1 :: -1]
     xn = toeplitz(a, b)
     if opt["hasTheta0"]:
-        xn = np.hstack([np.ones((len(wn), 1)), xn])
+        xn = np.hstack([np.ones(wn.shape), xn])
 
-    [thetap, kappa, steps, loglikel] = opt["maximize_loglikel"](xn, wn)
-
-    if opt["hasTheta0"]:
-        opt["theta0"] = thetap[0, :]
-        thetap[0, :] = []
-
-    opt["steps"] = steps
-    opt["loglikel"] = loglikel
-
-    return [thetap, kappa, opt]
+    return opt["maximize_loglikel"](xn, wn)
