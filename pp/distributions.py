@@ -16,13 +16,13 @@ def inverse_gaussian(
     @return: p: probability values, 0 < p < 1
     @rtype: np.array
     """
-    if isinstance(xs, np.array) and isinstance(mus, np.array):
+    if isinstance(xs, np.ndarray) and isinstance(mus, np.ndarray):
         if xs.shape != mus.shape:
-            raise TypeError(
+            raise ValueError(
                 f"{xs.shape}!={mus.shape}.\n"
                 "xs and mus should have the same shape if they're both np.array"
             )
-    elif isinstance(xs, np.array) or isinstance(mus, np.array):
+    elif isinstance(xs, np.ndarray) or isinstance(mus, np.ndarray):
         raise TypeError(
             f"xs: {type(xs)}\n"
             f"mus: {type(mus)}\n"

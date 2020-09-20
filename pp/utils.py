@@ -16,7 +16,7 @@ def load(path: str) -> np.array:
     return r
 
 
-def plot(r: np.array) -> None:
+def plot_intervals(r: np.array) -> None:
     """
     data: np.array as returned from the load() function.
 
@@ -26,4 +26,4 @@ def plot(r: np.array) -> None:
     diff = np.diff(r)
     plt.xlabel("time [s]")
     plt.ylabel("RR [ms]")
-    plt.plot(r, diff)
+    plt.plot(r[:-1], diff)

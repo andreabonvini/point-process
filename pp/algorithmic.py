@@ -58,10 +58,6 @@ def regr_likel(events: np.array, opt: dict = None) -> List:
 
     [thetap, kappa, steps, loglikel] = opt["maximize_loglikel"](xn, wn)
 
-    if opt["hasTheta0"]:
-        opt["theta0"] = thetap[0, :]
-        thetap[0, :] = []
-
     opt["steps"] = steps
     opt["loglikel"] = loglikel
 

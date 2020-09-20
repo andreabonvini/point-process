@@ -1,15 +1,11 @@
-from typing import Union
-
 import numpy as np
 
 from pp.distributions import inverse_gaussian
 
 
-def compute_loglikel(
-    eta: np.array, k: float, mus: Union[np.array, float], wn: Union[np.array, float]
-):
+def compute_loglikel(eta: np.array, k: float, mus: np.array, wn: np.array):
     logps = np.log(inverse_gaussian(wn, mus, k))
-    return np.dot(eta.T, logps)
+    return np.dot(eta.T, logps)[0, 0]
 
 
 def likel_invnorm(
@@ -54,44 +50,5 @@ def likel_invnorm(
     is the loglikelihood of the observations given the optimized parameters
     @rtype: list
     """
-    # Some consistency checks
-    m, n = xn.shape
-    if wn.shape != (m, 1):
-        raise ValueError(
-            f"Since xn has shape {xn.shape}, wn should be of shape ({m},1).\n"
-            f"Instead wn has shape {wn.shape}"
-        )
-    if eta is not None and eta.shape != (m, 1):
-        raise ValueError(
-            f"Since xn has shape {xn.shape}, eta should be of shape ({m},1).\n"
-            f"Instead eta has shape {eta.shape}"
-        )
-    if xt is not None and xt.shape != (1, n):
-        raise ValueError(
-            f"Since xn has shape {xn.shape}, xt should be of shape (1,{n}).\n"
-            f"Instead xt has shape {xt.shape}"
-        )
-    if thetap0 is not None and thetap0.shape != (n, 1):
-        raise ValueError(
-            f"Since xn has shape {xn.shape}, thetap0 should be of shape ({n},1).\n"
-            f"Instead thetap0 has shape {thetap0.shape}"
-        )
 
-    # TODO CHANGE INITIALIZATION
-    if thetap0 is None:
-        thetap = np.ones((n, 1))
-    else:
-        thetap = thetap0
-    if k0 is None:
-        k = 1.0
-    else:
-        k = k0
-    if eta is None:
-        eta = np.ones((m, 1))
-
-    mus = np.dot(xn, thetap)
-    # mus.shape : (m,1)
-    loglikel = compute_loglikel(eta, k, mus, wn)
-    print(loglikel)
-    print(wt)
-    print(max_steps)
+    pass
