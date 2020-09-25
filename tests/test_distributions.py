@@ -5,7 +5,7 @@ import numpy as np
 from pp.distributions import inverse_gaussian
 
 
-class Test_InverseGaussian(TestCase):
+class TestInverseGaussian(TestCase):
     def test_inverse_gaussian_floats(self):
         res = inverse_gaussian(xs=2.0, mus=2.0, lamb=1.0)
         assert 1 > res > 0

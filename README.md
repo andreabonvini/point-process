@@ -30,6 +30,9 @@ pipenv install <package-name>
 
 # Update the dependencies
 pipenv sync
+
+# Run bin/*.py script
+pipenv run python bin/*.py
 ```
 
 ### Tests
