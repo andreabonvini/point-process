@@ -1,5 +1,8 @@
 import argparse
 
+# noinspection PyUnresolvedReferences
+import fix_path  # noqa: F401
+
 from pp.algorithmic import regr_likel
 from pp.utils import load
 

@@ -20,7 +20,7 @@ def inverse_gaussian(
         (-lamb * (xs - mus) ** 2) / (2 * mus ** 2 * xs)
     )
 def compute_invgauss_negloglikel(params: np.array):
-    k_param, eta_params, thetap_params = _unpack_invgauss_params(params)
+    k_param, eta_params, thetap_params = unpack_invgauss_params(params)
     mus = np.dot(xn, thetap_params)
     # mus.shape : (m,1)
     logps = np.log(inverse_gaussian(wn, mus, k_param))
@@ -77,7 +77,7 @@ def compute_invgauss_negloglikel_grad(params: np.array):
     returns the vector of the first-derivatives of the negloglikelihood w.r.t to each 		parameter
     """
     # Retrieve the useful variables
-    k_param, eta_params, thetap_params = _unpack_invgauss_params(params)
+    k_param, eta_params, thetap_params = unpack_invgauss_params(params)
     mus = np.dot(xn, thetap_params).reshape((m,1))
     
     # Compute the gradient for k
@@ -177,15 +177,6 @@ $$
 $$
 
 Where:
-
-```python
-for i in range(m+1,m+n+1):
-    for j in range(m+1+i,m+1+n):
-        tmp1 = xn[:,i-m-1]*xn[:,j-m-1]
-        tmp2 = eta_params*k_param*(3*wn-2*mus)/(mus**4)
-        hess[i,j] = np.dot(tmp1.T,tmp2)
-```
-
 $$
 \frac{\part^2}{\part^2 k}\mathcal{L}(u_{t-m:t}|k,\mathbf{\eta}_t,\theta_t) =
 
@@ -281,7 +272,7 @@ def compute_invgauss_negloglikel_hessian(params: np.array):
     parameter
     """
     # Retrieve the useful variables
-    k_param, eta_params, thetap_params = _unpack_invgauss_params(params)
+    k_param, eta_params, thetap_params = unpack_invgauss_params(params)
     mus = np.dot(xn, thetap_params).reshape((m, 1))
     
     # Initialize hessian matrix

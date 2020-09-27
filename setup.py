@@ -2,7 +2,6 @@ import json
 
 from setuptools import find_packages, setup
 
-install_requires = []
 tests_require = []
 
 with open("Pipfile.lock") as fd:
