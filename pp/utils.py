@@ -3,6 +3,7 @@ from typing import Union
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from scipy.optimize import LinearConstraint
 
 
 def load(path: str) -> np.array:
@@ -29,6 +30,7 @@ def plot_intervals(r: np.array) -> None:
     plt.xlabel("time [s]")
     plt.ylabel("RR [ms]")
     plt.plot(r[:-1], diff)
+    plt.savefig("asd.png")
 
 
 def unpack_invgauss_params(params: np.array, m: int, n: int):
@@ -63,3 +65,10 @@ def likel_invgauss_consistency_check(
             f"Since xn has shape {xn.shape}, thetap0 should be of shape ({n},1).\n"
             f"Instead thetap0 has shape {thetap0.shape}"
         )
+
+
+def compute_constraints(n_var: int):
+    A = np.identity(n_var)
+    lb = np.zeros((n_var,))
+    ub = np.ones((n_var,)) * np.inf
+    return LinearConstraint(A, lb, ub)

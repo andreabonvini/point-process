@@ -15,6 +15,6 @@ if __name__ == "__main__":
         default="tests/test_data/Y2.csv",
     )
     args = parser.parse_args()
-    events = load(args.path)
-    events = events[269:285]
+    events = load(args.path)[70:120]
     res = regr_likel(events)
+    breakpoint()
