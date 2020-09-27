@@ -38,9 +38,8 @@ def regr_likel(events: np.array, opt: dict = None):
     # TODO uk is probably useless.
     # uk = observ_ev[opt["P"] + 1 :]
 
-    # rr is a np.array which contains the inter-event intervals.
-    rr = np.diff(observ_ev)
-
+    # rr is a np.array which contains the inter-event intervals expressed in ms.
+    rr = np.diff(observ_ev) * 1000
     # wn are the target inter-event intervals, i.e. the intervals we have to predict once we build our
     # RR autoregressive model.
     wn = rr[opt["P"] :]

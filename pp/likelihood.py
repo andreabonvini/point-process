@@ -2,7 +2,11 @@ import numpy as np
 from scipy.optimize import minimize
 
 from pp.distributions import inverse_gaussian
-from pp.utils import likel_invgauss_consistency_check, unpack_invgauss_params
+from pp.utils import (
+    compute_constraints,
+    likel_invgauss_consistency_check,
+    unpack_invgauss_params,
+)
 
 
 def compute_invgauss_negloglikel(params: np.array, xn: np.array, wn: np.array):
@@ -146,19 +150,25 @@ def likel_invnorm(
     # TODO CHANGE INITIALIZATION
     m, n = xn.shape
     if thetap0 is None:
-        thetap0 = np.ones((n, 1))
+        thetap0 = np.ones((n, 1)) / n
     if k0 is None:
         k0 = 0.5
     if eta0 is None:
-        eta0 = np.ones((m, 1))
+        eta0 = np.ones((m, 1)) / m
 
     # In order to optimize the parameters with scipy.optimize.minimize we need to pack all of our parameters in a
     # vector of shape (1+m+n,)
     params0 = np.vstack([k0, eta0, thetap0]).squeeze(1)
 
+    cons = compute_constraints(m + n + 1)
+
     return minimize(
         fun=compute_invgauss_negloglikel,
         x0=params0,
         jac=compute_invgauss_negloglikel_grad,
+        hess=compute_invgauss_negloglikel_hessian,
+        method="trust-constr",
         args=(xn, wn),
+        constraints=cons,
+        options={"maxiter": max_steps, "disp": True},
     )

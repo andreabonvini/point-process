@@ -28,6 +28,5 @@ def inverse_gaussian(
             f"mus: {type(mus)}\n"
             f"xs and mus should be either both np.array or both float"
         )
-    return np.sqrt(lamb / (2 * np.pi * xs ** 3)) * np.exp(
-        (-lamb * (xs - mus) ** 2) / (2 * mus ** 2 * xs)
-    )
+    arg = lamb / (2 * np.pi * xs ** 3)
+    return np.sqrt(arg) * np.exp((-lamb * (xs - mus) ** 2) / (2 * mus ** 2 * xs))
