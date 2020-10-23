@@ -1,11 +1,1 @@
-\#*\#
-*\#
-*~
-/data/
-__pycache__
-*.swp
-.coverage
-.mypy_cache
-.#*
-.idea/
-.DS_Store
+documentation/
