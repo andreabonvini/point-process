@@ -4,7 +4,7 @@ This repository contains a `Python` implementation of the `MATLAB` software prov
 
 ### Documentation
 
-The technical and scientific *documentation* for this repository can be found [here]([andreabonvini.github.io/pplib](http://andreabonvini.github.io/pplib)).
+The technical and scientific *documentation* for this repository can be found [here](https://andreabonvini.github.io/pplib/).
 
 ### Contributing
 
