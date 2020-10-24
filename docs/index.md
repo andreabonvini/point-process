@@ -13,7 +13,7 @@ The *code documentation* consists of a series of code snippets showing the usage
 - [Hazard Function in Survival Analysis](theory_docs/Hazard Function in Survival Analysis.html)
 - [Inhomogenous Poisson Process in the Time Domain](theory_docs/Inhomogenous Poisson Process in the Time Domain.html)
 
-#### Model the Inter-Event *pdf* through the Inverse Gaussian distribution.
+#### Model the Inter-Event pdf through the Inverse Gaussian distribution.
 
 - [Inverse Gaussian: Howe to model the inter-event probability density function and define the likelihood.](theory_docs/Inverse Gaussian - MLE for Point Process Analysis.html)
 
