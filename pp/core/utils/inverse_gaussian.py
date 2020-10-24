@@ -1,18 +1,88 @@
-import numpy as np
-from scipy.optimize import minimize
+from typing import Callable, Union
 
-from pp.distributions import inverse_gaussian
-from pp.utils import (
-    compute_constraints,
-    likel_invgauss_consistency_check,
-    unpack_invgauss_params,
-)
+import numpy as np
+
+from pp.core.model import PointProcessResult
+
+
+def build_ig_model(
+    k: float, eta: np.array, thetap: np.array
+) -> Callable[[np.ndarray], PointProcessResult]:
+    def ig_model(events: np.ndarray):  # pragma: no cover
+        # TODO implement it...
+        return PointProcessResult(mu=1.0, sigma=1.0)
+
+    return ig_model
+
+
+def inverse_gaussian(
+    xs: Union[np.array, float], mus: Union[np.array, float], lamb: float
+):
+    """
+    @param xs: points or point in which evaluate the probabilty
+    @type xs: np.array or float
+    @param mus: inverse gaussian means or mean
+    @type mus: np.array or float
+    @param lamb: inverse gaussian scaling factor
+    @type lamb: float
+    @return: p: probability values, 0 < p < 1
+    @rtype: np.array
+    """
+    if isinstance(xs, np.ndarray) and isinstance(mus, np.ndarray):
+        if xs.shape != mus.shape:
+            raise ValueError(
+                f"{xs.shape}!={mus.shape}.\n"
+                "xs and mus should have the same shape if they're both np.array"
+            )
+
+    elif isinstance(xs, np.ndarray) or isinstance(mus, np.ndarray):
+        raise TypeError(
+            f"xs: {type(xs)}\n"
+            f"mus: {type(mus)}\n"
+            f"xs and mus should be either both np.array or both float"
+        )
+    arg = lamb / (2 * np.pi * xs ** 3)
+    return np.sqrt(arg) * np.exp((-lamb * (xs - mus) ** 2) / (2 * mus ** 2 * xs))
+
+
+def unpack_invgauss_params(params: np.array, m: int, n: int):
+    return params[0], params[1 : 1 + m].reshape((m, 1)), params[1 + m :].reshape((n, 1))
+
+
+def likel_invgauss_consistency_check(
+    xn: np.array,
+    wn: np.array,
+    eta: Union[np.array, None],
+    xt: Union[np.array, None],
+    thetap0: Union[np.array, None],
+):
+    m, n = xn.shape
+    if wn.shape != (m, 1):
+        raise ValueError(
+            f"Since xn has shape {xn.shape}, wn should be of shape ({m},1).\n"
+            f"Instead wn has shape {wn.shape}"
+        )
+    if eta is not None and eta.shape != (m, 1):
+        raise ValueError(
+            f"Since xn has shape {xn.shape}, eta should be of shape ({m},1).\n"
+            f"Instead eta has shape {eta.shape}"
+        )
+    if xt is not None and xt.shape != (1, n):
+        raise ValueError(
+            f"Since xn has shape {xn.shape}, xt should be of shape (1,{n}).\n"
+            f"Instead xt has shape {xt.shape}"
+        )
+    if thetap0 is not None and thetap0.shape != (n, 1):
+        raise ValueError(
+            f"Since xn has shape {xn.shape}, thetap0 should be of shape ({n},1).\n"
+            f"Instead thetap0 has shape {thetap0.shape}"
+        )
 
 
 def compute_invgauss_negloglikel(params: np.array, xn: np.array, wn: np.array):
     """
     ALERT: Remember that the parameters that we want to optimize are just k, eta and thetap
-    #TODO Handle the case in which eta is constant
+    TODO Handle the case in which eta is constant
     """
 
     m, n = xn.shape
@@ -100,75 +170,3 @@ def compute_invgauss_negloglikel_hessian(params: np.array, xn: np.array, wn: np.
     # Populate the rest of the matrix
     hess = np.where(hess, hess, hess.T)
     return hess
-
-
-def likel_invnorm(
-    xn: np.array,
-    wn: np.array,
-    eta0: np.array = None,
-    thetap0: np.array = None,
-    k0: float = None,
-    xt: np.array = None,
-    wt: float = None,
-    max_steps: int = None,
-):
-    """
-    @param xn: xn is a matrix MxN of regressors, each row of xn is associated to the corresponding element of wn.
-    @type xn: np.array
-    @param wn: wn is a vector Mx1 of observations.
-    @type wn: np.array
-    @param eta0: eta is a vector Mx1 of weights (when missing or empty, then a constant weight of 1s is used)
-    @type eta0: np.array
-    @param thetap0:
-    thetap0 is a vector Nx1 of coefficients used as starting point for the  newton-rhapson optimization
-    (found, e.g., using the uncensored estimation)
-    @type thetap0: np.array
-    @param k0: k0 is the starting point for the scale parameter (sometimes called lambda).
-    @type k0: float
-    @param xt: xt is a vector 1xN of regressors, for the censoring part. (IF RIGHT-CENSORING)
-    @type xt: np.array
-    @param wt: wt is the current value of the future observation. (IF RIGHT-CENSORING)
-    @type wt: float
-    @param max_steps: max_steps is the maximum number of allowed newton-raphson iterations.
-    @type max_steps: int
-    @return: [thetap,k,steps,loglikel] (IF NOT RIGHT-CENSORING)
-    #TODO What should I return if right-censoring is applied? Check the MATLAB script.
-    - thetap:
-    is a vector Nx1 of coefficients such that xn*thetap gives the mean of the history-dependent
-    inverse gaussian distribution for each observation.
-    - k:
-    is the scale parameter of the inverse gaussian distribution (sometimes called lambda)
-    - steps:
-    is the number of newton-raphson iterations used
-    - loglikel:
-    is the loglikelihood of the observations given the optimized parameters
-    """
-
-    # Some consistency checks
-    likel_invgauss_consistency_check(xn, wn, eta0, xt, thetap0)
-
-    # TODO CHANGE INITIALIZATION
-    m, n = xn.shape
-    if thetap0 is None:
-        thetap0 = np.ones((n, 1)) / n
-    if k0 is None:
-        k0 = 0.5
-    if eta0 is None:
-        eta0 = np.ones((m, 1)) / m
-
-    # In order to optimize the parameters with scipy.optimize.minimize we need to pack all of our parameters in a
-    # vector of shape (1+m+n,)
-    params0 = np.vstack([k0, eta0, thetap0]).squeeze(1)
-
-    cons = compute_constraints(m + n + 1)
-
-    return minimize(
-        fun=compute_invgauss_negloglikel,
-        x0=params0,
-        jac=compute_invgauss_negloglikel_grad,
-        hess=compute_invgauss_negloglikel_hessian,
-        method="trust-constr",
-        args=(xn, wn),
-        constraints=cons,
-        options={"maxiter": max_steps, "disp": True},
-    )
