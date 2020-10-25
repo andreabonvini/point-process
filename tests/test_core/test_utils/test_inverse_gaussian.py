@@ -2,7 +2,9 @@ from unittest import TestCase
 
 import numpy as np
 
+from pp.core.model import InterEventDistribution
 from pp.core.utils.inverse_gaussian import (
+    build_ig_model,
     compute_invgauss_negloglikel,
     compute_invgauss_negloglikel_grad,
     compute_invgauss_negloglikel_hessian,
@@ -118,3 +120,29 @@ class TestInverseGaussian(TestCase):
                 xt=None,
                 thetap0=np.ones((self.n - 1, 1)),
             )
+
+    def test_build_ig_model_hasTheta0_true(self):
+        hasTheta0 = True
+        ar_order = 3
+        thetap = np.ones(ar_order + 1) / (ar_order + 1)
+        k = 1.00
+        pp_model = build_ig_model(thetap, k, hasTheta0)
+        inter_event_times = np.ones((ar_order,))
+        res = pp_model(inter_event_times)
+        self.assertEqual(res.mu, 1.00)
+        self.assertEqual(res.sigma, 1.00)
+        # FIXME move to test_model the code below
+        self.assertEqual(pp_model.hasTheta0, hasTheta0)
+        self.assertEqual(pp_model.ar_order, ar_order)
+        self.assertEqual(pp_model.distribution, InterEventDistribution.INVERSE_GAUSSIAN)
+        self.assertEqual(pp_model.expected_input_shape, (ar_order,))
+
+    def test_ig_model_wrong_usage(self):
+        hasTheta0 = True
+        ar_order = 3
+        thetap = np.ones(ar_order + 1) / (ar_order + 1)
+        k = 1.00
+        pp_model = build_ig_model(thetap, k, hasTheta0)
+        wrong_shape_inter_event_times = np.ones((ar_order + 1,))
+        with self.assertRaises(ValueError):
+            pp_model(wrong_shape_inter_event_times)

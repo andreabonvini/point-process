@@ -3,7 +3,7 @@ from typing import Optional
 import numpy as np
 from scipy.optimize import minimize
 
-from pp.core.model import InterEventDistribution, PointProcessModel
+from pp.core.model import PointProcessDataset, PointProcessModel
 from pp.core.utils.constraints import greater_than_zero
 from pp.core.utils.inverse_gaussian import (
     build_ig_model,
@@ -16,8 +16,7 @@ from pp.core.utils.inverse_gaussian import (
 
 
 def inverse_gaussian_maximizer(
-    xn: np.array,
-    wn: np.array,
+    dataset: PointProcessDataset,
     max_steps: int = 1000,
     eta0: Optional[np.array] = None,
     thetap0: Optional[np.array] = None,
@@ -26,42 +25,23 @@ def inverse_gaussian_maximizer(
     wt: Optional[float] = None,
 ) -> PointProcessModel:
     """
-    @param xn: xn is a matrix MxN of regressors, each row of xn is associated to the corresponding element of wn.
-    @type xn: np.array
-    @param wn: wn is a vector Mx1 of observations.
-    @type wn: np.array
-    @param eta0: eta is a vector Mx1 of weights (when missing or empty, then a constant weight of 1s is used)
-    @type eta0: np.array
-    @param thetap0:
-    thetap0 is a vector Nx1 of coefficients used as starting point for the  newton-rhapson optimization
-    (found, e.g., using the uncensored estimation)
-    @type thetap0: np.array
-    @param k0: k0 is the starting point for the scale parameter (sometimes called lambda).
-    @type k0: float
-    @param xt: xt is a vector 1xN of regressors, for the censoring part. (IF RIGHT-CENSORING)
-    @type xt: np.array
-    @param wt: wt is the current value of the future observation. (IF RIGHT-CENSORING)
-    @type wt: float
-    @param max_steps: max_steps is the maximum number of allowed newton-raphson iterations.
-    @type max_steps: int
-    @return: [thetap,k,steps,loglikel] (IF NOT RIGHT-CENSORING)
-    #TODO What should I return if right-censoring is applied? Check the MATLAB script.
-    - thetap:
-    is a vector Nx1 of coefficients such that xn*thetap gives the mean of the history-dependent
-    inverse gaussian distribution for each observation.
-    - k:
-    is the scale parameter of the inverse gaussian distribution (sometimes called lambda)
-    - steps:
-    is the number of newton-raphson iterations used
-    - loglikel:
-    is the loglikelihood of the observations given the optimized parameters
+    Args:
+        dataset: PointProcessDataset to use for the regression.
+        max_steps: max_steps is the maximum number of allowed iterations of the optimization process.
+        eta0: is a vector Mx1 of weights (when missing or empty, then a constant weight of 1s is used).
+        thetap0: is a vector Nx1 of coefficients used as starting point for the optimization process.
+        k0: is the starting point for the scale parameter (sometimes called lambda).
+        xt: is a vector 1xN of regressors, for the censoring part. (IF RIGHT-CENSORING)
+        wt: is the current value of the future observation. (IF RIGHT-CENSORING)
+    Returns:
+        PointProcessModel
     """
 
     # Some consistency checks
-    likel_invgauss_consistency_check(xn, wn, eta0, xt, thetap0)
+    likel_invgauss_consistency_check(dataset.xn, dataset.wn, eta0, xt, thetap0)
 
     # TODO CHANGE INITIALIZATION
-    m, n = xn.shape
+    m, n = dataset.xn.shape
     if thetap0 is None:
         thetap0 = np.ones((n, 1)) / n
     if k0 is None:
@@ -82,7 +62,7 @@ def inverse_gaussian_maximizer(
         jac=compute_invgauss_negloglikel_grad,
         hess=compute_invgauss_negloglikel_hessian,
         method="trust-constr",
-        args=(xn, wn),
+        args=(dataset.xn, dataset.wn),
         constraints=cons,
         options={"maxiter": max_steps, "disp": True},
     )
@@ -90,7 +70,4 @@ def inverse_gaussian_maximizer(
     k_param, eta_params, thetap_params = unpack_invgauss_params(
         optimal_parameters, m, n
     )
-    model = build_ig_model(k_param, eta_params, thetap_params)
-    return PointProcessModel(
-        model=model, distribution=InterEventDistribution.INVERSE_GAUSSIAN, ar_order=n
-    )
+    return build_ig_model(thetap_params, k_param, dataset.hasTheta0)

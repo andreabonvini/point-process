@@ -3,8 +3,8 @@ import argparse
 # noinspection PyUnresolvedReferences
 import fix_path  # noqa: F401
 
-from pp.pp import regr_likel
-from pp.utils import load
+from pp.core.utils import load
+from pp.regression import regr_likel
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="")

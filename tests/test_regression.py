@@ -12,11 +12,15 @@ def fake_model(events: np.ndarray) -> PointProcessResult:
 
 
 mock_res = PointProcessModel(
-    model=fake_model, distribution=InterEventDistribution.INVERSE_GAUSSIAN, ar_order=3
+    model=fake_model,
+    expected_shape=(3,),
+    distribution=InterEventDistribution.INVERSE_GAUSSIAN,
+    ar_order=3,
+    hasTheta0=True,
 )
 
 mocked_maximizers_dict = {
-    InterEventDistribution.INVERSE_GAUSSIAN.value: lambda xn, wn: mock_res
+    InterEventDistribution.INVERSE_GAUSSIAN.value: lambda data: mock_res
 }
 
 
