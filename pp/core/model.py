@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Callable
 
@@ -88,3 +89,20 @@ class PointProcessDataset:
         if hasTheta0:
             xn = np.hstack([np.ones(wn.shape), xn])
         return cls(xn, wn, p, hasTheta0)
+
+
+class PointProcessMaximizer(ABC):  # pragma: no cover
+    @abstractmethod
+    def train(self) -> PointProcessModel:
+        pass
+
+
+class WeightsProducer(ABC):  # pragma: no cover
+    # FIXME mypy fails if abstract __call__ is defined
+    # @abstractmethod
+    # def __call__(self, *args, **kwargs) -> np.ndarray:
+    #   return self._compute_weights()
+
+    @abstractmethod
+    def _compute_weights(self) -> np.ndarray:
+        pass

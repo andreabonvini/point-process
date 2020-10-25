@@ -65,14 +65,9 @@ def inverse_gaussian(
     return np.sqrt(arg) * np.exp((-lamb * (xs - mus) ** 2) / (2 * mus ** 2 * xs))
 
 
-def unpack_invgauss_params(params: np.array, m: int, n: int):
-    return params[0], params[1 : 1 + m].reshape((m, 1)), params[1 + m :].reshape((n, 1))
-
-
 def likel_invgauss_consistency_check(
     xn: np.array,
     wn: np.array,
-    eta: Union[np.array, None],
     xt: Union[np.array, None],
     thetap0: Union[np.array, None],
 ):
@@ -81,11 +76,6 @@ def likel_invgauss_consistency_check(
         raise ValueError(
             f"Since xn has shape {xn.shape}, wn should be of shape ({m},1).\n"
             f"Instead wn has shape {wn.shape}"
-        )
-    if eta is not None and eta.shape != (m, 1):
-        raise ValueError(
-            f"Since xn has shape {xn.shape}, eta should be of shape ({m},1).\n"
-            f"Instead eta has shape {eta.shape}"
         )
     if xt is not None and xt.shape != (1, n):
         raise ValueError(
@@ -99,22 +89,23 @@ def likel_invgauss_consistency_check(
         )
 
 
-def compute_invgauss_negloglikel(params: np.array, xn: np.array, wn: np.array) -> float:
+def compute_invgauss_negloglikel(
+    params: np.array, xn: np.array, wn: np.array, eta: np.array
+) -> float:
     """
-    ALERT: Remember that the parameters that we want to optimize are just k, eta and thetap
-    TODO Handle the case in which eta is constant
+    ALERT: Remember that the parameters that we want to optimize are just k, and thetap
     """
 
     m, n = xn.shape
-    k_param, eta_params, thetap_params = unpack_invgauss_params(params, m, n)
+    k_param, thetap_params = params[0], params[1:]
 
     mus = np.dot(xn, thetap_params).reshape((m, 1))
     logps = np.log(inverse_gaussian(wn, mus, k_param))
-    return -np.dot(eta_params.T, logps)[0, 0]
+    return -np.dot(eta.T, logps)[0, 0]
 
 
 def compute_invgauss_negloglikel_grad(
-    params: np.array, xn: np.array, wn: np.array
+    params: np.array, xn: np.array, wn: np.array, eta: np.array
 ) -> np.ndarray:
     """
     returns the vector of the first-derivatives of the negloglikelihood w.r.t to each parameter
@@ -122,26 +113,27 @@ def compute_invgauss_negloglikel_grad(
 
     m, n = xn.shape
     # Retrieve the useful variables
-    k_param, eta_params, thetap_params = unpack_invgauss_params(params, m, n)
+    k_param, thetap_params = params[0], params[1:]
     mus = np.dot(xn, thetap_params).reshape((m, 1))
 
     # Compute the gradient for k
     tmp = -1 / k_param + (wn - mus) ** 2 / (mus ** 2 * wn)
-    k_grad = np.dot((eta_params / 2).T, tmp)
+    k_grad = np.dot((eta / 2).T, tmp)
 
+    # TODO remove next line, eta should not be learnable
     # Compute the gradient for eta[0]...eta[m-1]
-    eta_grad = -1 * np.log(inverse_gaussian(wn, mus, k_param))
+    # eta_grad = -1 * np.log(inverse_gaussian(wn, mus, k_param))
 
     # Compute the gradient form thetap[0]...thetap[n-1]
-    tmp = -1 * k_param * eta_params * (wn - mus) / mus ** 3
+    tmp = -1 * k_param * eta * (wn - mus) / mus ** 3
     thetap_grad = np.dot(tmp.T, xn).T
 
     # Return all the gradients as a single vector of shape (n+m+1,)
-    return np.vstack([k_grad, eta_grad, thetap_grad]).squeeze(1)
+    return np.vstack([k_grad, thetap_grad]).squeeze(1)
 
 
 def compute_invgauss_negloglikel_hessian(
-    params: np.array, xn: np.array, wn: np.array
+    params: np.array, xn: np.array, wn: np.array, eta: np.array
 ) -> np.ndarray:
     """
     returns the vector of the second-derivatives of the negloglikelihood w.r.t to each
@@ -150,45 +142,49 @@ def compute_invgauss_negloglikel_hessian(
 
     m, n = xn.shape
     # Retrieve the useful variables
-    k_param, eta_params, thetap_params = unpack_invgauss_params(params, m, n)
+    k_param, thetap_params = params[0], params[1:]
     mus = np.dot(xn, thetap_params).reshape((m, 1))
 
     # Initialize hessian matrix
-    hess = np.zeros((1 + m + n, 1 + m + n))
+    hess = np.zeros((1 + n, 1 + n))
 
     # We populate the hessian as a upper triangular matrix
     # by filling the rows starting from the main diagonal
 
     # Partial derivatives w.r.t. k
-    kk = np.sum(eta_params) * 1 / (2 * k_param ** 2)
-    keta = 1 / 2 * (-1 / k_param + (wn - mus) ** 2 / (mus ** 2 * wn))
-    tmp = eta_params * (wn - mus) / mus ** 3
-    ktheta = -np.dot(tmp.T, xn).T
+    kk = np.sum(eta) * 1 / (2 * k_param ** 2)
+    # TODO remove next line, eta should not be learnable
+    # keta = 1 / 2 * (-1 / k_param + (wn - mus) ** 2 / (mus ** 2 * wn))
+    ktheta_tmp = eta * (wn - mus) / mus ** 3
+    ktheta = -np.dot(ktheta_tmp.T, xn).T
 
     hess[0, 0] = kk
-    hess[0, 1 : (1 + m)] = keta.squeeze(1)
-    hess[0, (1 + m) : (1 + m + n)] = ktheta.squeeze(1)
+    # TODO remove next line, eta should not be learnable
+    # hess[0, 1 : (1 + m)] = keta.squeeze(1)
+    hess[0, 1 : 1 + n] = ktheta.squeeze(1)
 
+    # TODO remove next lines, eta should not be learnable
     # All the partial derivatives in the form eta_j\eta_q are null
-    for i in range(1, m + 1):
-        for j in range(i, m + 1):
-            hess[i, j] = 0
+    # for i in range(1, m + 1):
+    #    for j in range(i, m + 1):
+    #        hess[i, j] = 0
 
-    # TODO is there a smarter way? (eta_j\theta_q)
-    for i in range(1, m + 1):
-        for j in range(m + 1 + i, m + 1 + n):
-            hess[i, j] = (
-                -k_param
-                * (xn[i - 1, j - m - 1])
-                * (wn[i - 1] - mus[i - 1])
-                / mus[i - 1] ** 3
-            )
+    # TODO remove next lines, eta should not be learnable
+    # (eta_j\theta_q)
+    # for i in range(1, m + 1):
+    #    for j in range(m + 1 + i, m + 1 + n):
+    #        hess[i, j] = (
+    #            -k_param
+    #            * (xn[i - 1, j - m - 1])
+    #            * (wn[i - 1] - mus[i - 1])
+    #            / mus[i - 1] ** 3
+    #       )
 
     # TODO is there a smarter way? (theta_j\theta_q)
-    for i in range(m + 1, m + n + 1):
-        for j in range(m + 1 + i, m + 1 + n):
-            tmp1 = xn[:, i - m - 1] * xn[:, j - m - 1]
-            tmp2 = eta_params * k_param * (3 * wn - 2 * mus) / (mus ** 4)
+    for i in range(1, n + 1):
+        for j in range(1 + i, n + 1):
+            tmp1 = xn[:, i - 1] * xn[:, j - 1]
+            tmp2 = eta * k_param * (3 * wn - 2 * mus) / (mus ** 4)
             hess[i, j] = np.dot(tmp1.T, tmp2)
 
     # Populate the rest of the matrix

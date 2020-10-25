@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 import numpy as np
 from scipy.optimize.optimize import OptimizeResult
 
-from pp.core.maximizers import inverse_gaussian_maximizer
+from pp.core.maximizers import InverseGaussianMaximizer
 from pp.core.model import PointProcessDataset, PointProcessModel
 
 
@@ -35,5 +35,5 @@ class TestMaximizers(TestCase):
         mock_res.x = np.ones((self.m + self.n + 1,))
         minim.return_value = mock_res
         dataset = PointProcessDataset(self.xn, self.wn, self.p, self.hasTheta0)
-        res = inverse_gaussian_maximizer(dataset)
+        res = InverseGaussianMaximizer(dataset).train()
         self.assertIsInstance(res, PointProcessModel)
