@@ -5,7 +5,7 @@ import numpy as np
 from scipy.optimize.optimize import OptimizeResult
 
 from pp.core.maximizers import inverse_gaussian_maximizer
-from pp.core.model import PointProcessModel
+from pp.core.model import PointProcessDataset, PointProcessModel
 
 
 class TestMaximizers(TestCase):
@@ -22,6 +22,8 @@ class TestMaximizers(TestCase):
         )
 
         self.m, self.n = self.xn.shape
+        self.hasTheta0 = True
+        self.p = self.n - 1
         self.wn = np.ones((self.m, 1))
         self.params = np.vstack(
             [0.5, np.ones((self.m, 1)), np.ones((self.n, 1))]
@@ -32,5 +34,6 @@ class TestMaximizers(TestCase):
         mock_res = Mock(OptimizeResult)
         mock_res.x = np.ones((self.m + self.n + 1,))
         minim.return_value = mock_res
-        res = inverse_gaussian_maximizer(self.xn, self.wn)
+        dataset = PointProcessDataset(self.xn, self.wn, self.p, self.hasTheta0)
+        res = inverse_gaussian_maximizer(dataset)
         self.assertIsInstance(res, PointProcessModel)

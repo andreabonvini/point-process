@@ -1,23 +1,43 @@
-from typing import Callable, Union
+from typing import Union
 
 import numpy as np
 
-from pp.core.model import PointProcessResult
+from pp.core.model import InterEventDistribution, PointProcessModel, PointProcessResult
 
 
-def build_ig_model(
-    k: float, eta: np.array, thetap: np.array
-) -> Callable[[np.ndarray], PointProcessResult]:
-    def ig_model(events: np.ndarray):  # pragma: no cover
-        # TODO implement it...
-        return PointProcessResult(mu=1.0, sigma=1.0)
+def build_ig_model(thetap: np.ndarray, k: float, hasTheta0: bool) -> PointProcessModel:
+    expected_shape = (thetap.shape[0] - 1,) if hasTheta0 else (thetap.shape[0],)
 
-    return ig_model
+    def ig_model(inter_event_times: np.ndarray) -> PointProcessResult:
+        if inter_event_times.shape != expected_shape:
+            raise ValueError(
+                f"The inter-event times shape ({inter_event_times.shape})"
+                f" is incompatible with the inter-event times shape used for training ({expected_shape})"
+            )
+        # reverse order
+        inter_event_times = inter_event_times[::-1]
+        # append 1 if hasTheta0
+        inter_event_times = (
+            np.concatenate(([1], inter_event_times)) if hasTheta0 else inter_event_times
+        )
+        # reshape from (n,) to (n,1)
+        inter_event_times = inter_event_times.reshape(-1, 1)
+        mu = np.dot(thetap, inter_event_times)[0]
+        sigma = np.sqrt(mu ** 3 / k)
+        return PointProcessResult(mu, sigma)
+
+    return PointProcessModel(
+        model=ig_model,
+        expected_shape=expected_shape,
+        distribution=InterEventDistribution.INVERSE_GAUSSIAN,
+        ar_order=expected_shape[0],
+        hasTheta0=hasTheta0,
+    )
 
 
 def inverse_gaussian(
     xs: Union[np.array, float], mus: Union[np.array, float], lamb: float
-):
+) -> np.ndarray:
     """
     @param xs: points or point in which evaluate the probabilty
     @type xs: np.array or float
@@ -79,7 +99,7 @@ def likel_invgauss_consistency_check(
         )
 
 
-def compute_invgauss_negloglikel(params: np.array, xn: np.array, wn: np.array):
+def compute_invgauss_negloglikel(params: np.array, xn: np.array, wn: np.array) -> float:
     """
     ALERT: Remember that the parameters that we want to optimize are just k, eta and thetap
     TODO Handle the case in which eta is constant
@@ -93,7 +113,9 @@ def compute_invgauss_negloglikel(params: np.array, xn: np.array, wn: np.array):
     return -np.dot(eta_params.T, logps)[0, 0]
 
 
-def compute_invgauss_negloglikel_grad(params: np.array, xn: np.array, wn: np.array):
+def compute_invgauss_negloglikel_grad(
+    params: np.array, xn: np.array, wn: np.array
+) -> np.ndarray:
     """
     returns the vector of the first-derivatives of the negloglikelihood w.r.t to each parameter
     """
@@ -118,7 +140,9 @@ def compute_invgauss_negloglikel_grad(params: np.array, xn: np.array, wn: np.arr
     return np.vstack([k_grad, eta_grad, thetap_grad]).squeeze(1)
 
 
-def compute_invgauss_negloglikel_hessian(params: np.array, xn: np.array, wn: np.array):
+def compute_invgauss_negloglikel_hessian(
+    params: np.array, xn: np.array, wn: np.array
+) -> np.ndarray:
     """
     returns the vector of the second-derivatives of the negloglikelihood w.r.t to each
     parameter
