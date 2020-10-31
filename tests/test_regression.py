@@ -37,7 +37,7 @@ mock_maximizer = Mock(spec=PointProcessMaximizer)
 mock_maximizer.train.return_value = mock_model
 
 mocked_maximizers_dict = {
-    InterEventDistribution.INVERSE_GAUSSIAN.value: lambda data: mock_maximizer
+    InterEventDistribution.INVERSE_GAUSSIAN.value: lambda data, wp: mock_maximizer
 }
 
 

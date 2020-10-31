@@ -31,8 +31,8 @@ class InverseGaussianMaximizer(PointProcessMaximizer, ABC):
     def __init__(
         self,
         dataset: PointProcessDataset,
+        weights_producer: WeightsProducer,
         max_steps: int = 1000,
-        weights_producer: WeightsProducer = ExponentialWeightsProducer(),
         theta0: Optional[np.array] = None,
         k0: Optional[float] = None,
         xt: Optional[np.array] = None,

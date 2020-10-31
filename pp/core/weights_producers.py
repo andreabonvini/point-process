@@ -14,6 +14,11 @@ class ConstantWeightsProducer(WeightsProducer):
 
 class ExponentialWeightsProducer(WeightsProducer):
     def __init__(self, alpha: float = 0.005):
+        """
+        Args:
+            alpha: Weighting time constant that governs the degree of influence
+                    of a previous observation on the local likelihood.
+        """
         self.alpha = alpha
 
     def __call__(self, target_intervals: np.ndarray) -> np.ndarray:
@@ -21,13 +26,10 @@ class ExponentialWeightsProducer(WeightsProducer):
             Args:
                 target_intervals:
                     Target intervals vector (as stored in PointProcessDataset.wn)
-                alpha:
-                    Weighting time constant that governs the degree of influence
-                    of a previous observation on the local likelihood.
         """
         self.target_intervals = target_intervals
         return self._compute_weights()
 
     def _compute_weights(self) -> np.ndarray:
         target_times = np.cumsum(self.target_intervals) - self.target_intervals[0]
-        return np.exp(-self.alpha * target_times).reshape((len(target_times), 1))[::-1]
+        return np.exp(-self.alpha * target_times).reshape(-1, 1)[::-1]

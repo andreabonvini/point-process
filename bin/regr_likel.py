@@ -35,10 +35,12 @@ if __name__ == "__main__":
     n_samples = 150
     fs = data[0, 6]
     events = data[:n_samples, 0] / fs
-    model = regr_likel(events, InterEventDistribution.INVERSE_GAUSSIAN, args.ar_order)
+    diffs = events2interevents(events)
+    dataset = PointProcessDataset.load(diffs, args.ar_order, True)
+    model = regr_likel(dataset, InterEventDistribution.INVERSE_GAUSSIAN)
 
     # plot some result
-    diffs = events2interevents(events)
+
     k_history = []
     theta_history = []
     for params in model.params_history:
@@ -50,9 +52,9 @@ if __name__ == "__main__":
     plt.savefig(f"{args.output_dir}/data.png")
     plt.clf()
 
-    dataset = PointProcessDataset.load(diffs, args.ar_order, True)
-    test_data = dataset.xn[:, 1:]
-    targets = dataset.wn.reshape(dataset.wn.shape[0],)
+    dataset = PointProcessDataset.load(diffs, args.ar_order, False)
+    test_data = dataset.xn
+    targets = dataset.wn.squeeze()
     mu_predictions = np.array([model(sample).mu for sample in test_data])
     residuals = mu_predictions - targets
 

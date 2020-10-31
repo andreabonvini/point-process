@@ -19,10 +19,8 @@ The technical and scientific *documentation* for this repository can be found [h
 ### Usage example
 
 ```python
-from pp import InterEventDistribution
-from pp.core.model import PointProcessDataset
-from pp.regression import regr_likel
-
+from pp import InterEventDistribution, PointProcessDataset
+from pp import regr_likel
 # Suppose we have a np.array inter_events containing inter-event times expressed in seconds.
 # Build a dataset object with the specified AR order (p) and hasTheta0 option (if we want to account for the bias)
 dataset = PointProcessDataset.load(
@@ -37,7 +35,7 @@ pp_model = regr_likel(dataset, InterEventDistribution.INVERSE_GAUSSIAN)
 dataset = PointProcessDataset.load(
     inter_events_times=inter_events,
     p=9,
-    hasTheta0=True
+    hasTheta0=False
 )
 test_data = dataset.xn
 targets = dataset.wn
