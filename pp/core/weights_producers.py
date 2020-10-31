@@ -9,11 +9,14 @@ class ConstantWeightsProducer(WeightsProducer):
         return self._compute_weights()
 
     def _compute_weights(self) -> np.ndarray:
-        return np.ones((self.n,))
+        return np.ones((self.n, 1))
 
 
 class ExponentialWeightsProducer(WeightsProducer):
-    def __call__(self, target_intervals: np.ndarray, alpha: float) -> np.ndarray:
+    def __init__(self, alpha: float = 0.005):
+        self.alpha = alpha
+
+    def __call__(self, target_intervals: np.ndarray) -> np.ndarray:
         """
             Args:
                 target_intervals:
@@ -23,9 +26,8 @@ class ExponentialWeightsProducer(WeightsProducer):
                     of a previous observation on the local likelihood.
         """
         self.target_intervals = target_intervals
-        self.alpha = alpha
         return self._compute_weights()
 
     def _compute_weights(self) -> np.ndarray:
         target_times = np.cumsum(self.target_intervals) - self.target_intervals[0]
-        return np.exp(-self.alpha * target_times)
+        return np.exp(-self.alpha * target_times).reshape((len(target_times), 1))[::-1]
