@@ -111,3 +111,72 @@ wp = ExponentialWeightsProducer(alpha = 0.01) # or ConstantWeightsProducer()
 pp_model = regr_likel(dataset, InterEventDistribution.INVERSE_GAUSSIAN, wp)
 ```
 
+#### `PointProcessModel`
+
+The result from the `regr_likel()` function is a `PointProcessModel`, this kind of object contains, other than the actual model, information about the training process and the learnt parameters.
+
+```python
+class PointProcessModel:
+    def __init__(
+        self,
+        model: Callable[[np.ndarray], PointProcessResult],
+        expected_shape: tuple,
+        theta: np.ndarray,
+        k: float,
+        results: List[float],
+        params_history: List[np.ndarray],
+        distribution: InterEventDistribution,
+        ar_order: int,
+        hasTheta0: bool,
+    ):
+        """
+        Args:
+            model: actual model which yields a PointProcessResult
+            expected_shape: expected input shape to feed the PointProcessModel with
+            theta: final AR parameters.
+            k: final shape parameter (aka lambda).
+            results: negative log-likelihood values obtained during the optimization process (should diminuish in time).
+            params_history: list of parameters obtained during the optimization process
+            distribution: fitting distribution used to train the model.
+            ar_order: AR order used to train the model
+            hasTheta0: if the model was trained with theta0 parameter
+        """
+        self._model = model
+        self.expected_input_shape = expected_shape
+        self.theta = theta
+        self.k = k
+        self.results = results
+        self.params_history = params_history
+        self.distribution = distribution
+        self.ar_order = ar_order
+        self.hasTheta0 = hasTheta0
+
+    def __repr__(self):
+        return (
+            f"<PointProcessModel<\n"
+            f"\t<model={self._model}>\n"
+            f"\t<expected_input_shape={self.expected_input_shape}>\n"
+            f"\t<distributuon={self.distribution}>\n"
+            f"\t<ar_order={self.ar_order}>\n"
+            f"\t<hasTheta0={self.hasTheta0}>\n"
+            f">"
+        )
+
+    def __call__(self, inter_event_times: np.ndarray):
+        return self._model(inter_event_times)
+```
+
+#### `PointProcessResult`
+
+A call to a `PointProcessModel` yields a `PointProcessResult`
+
+```python
+class PointProcessResult:
+    def __init__(self, mu, sigma):
+        self.mu = mu
+        self.sigma = sigma
+
+    def __repr__(self):
+        return f"mu: {self.mu}\nsigma: {self.sigma}"
+```
+
