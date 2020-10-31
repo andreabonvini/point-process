@@ -5,6 +5,7 @@ import numpy as np
 
 from pp.core.model import (
     InterEventDistribution,
+    PointProcessDataset,
     PointProcessMaximizer,
     PointProcessModel,
     PointProcessResult,
@@ -45,8 +46,7 @@ class TestRegression(TestCase):
     def test_regr_likel(self):
         events = np.linspace(1, 30, 15)
         res = regr_likel(
-            events=events,
+            dataset=PointProcessDataset.load(np.diff(events), 3, True),
             maximizer_distribution=InterEventDistribution.INVERSE_GAUSSIAN,
-            p=3,
         )
         self.assertEqual(res, mock_model)
