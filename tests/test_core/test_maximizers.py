@@ -33,6 +33,8 @@ class TestMaximizers(TestCase):
     def test_inverse_gaussian_maximizer(self, minim):
         mock_res = Mock(OptimizeResult)
         mock_res.x = np.ones((self.m + self.n + 1,))
+        mock_res.nit = 100
+        mock_res.success = True
         minim.return_value = mock_res
         dataset = PointProcessDataset(self.xn, self.wn, self.p, self.hasTheta0)
         res = InverseGaussianMaximizer(dataset).train()

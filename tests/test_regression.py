@@ -19,6 +19,14 @@ def fake_model(events: np.ndarray) -> PointProcessResult:
 mock_model = PointProcessModel(
     model=fake_model,
     expected_shape=(3,),
+    theta=np.array([1, 2, 3, 4]),
+    k=1000,
+    results=[1.0, 0.6, 0.1],
+    params_history=[
+        np.array([1, 2, 3, 4]),
+        np.array([1, 2, 3, 4]),
+        np.array([1, 2, 3, 4]),
+    ],
     distribution=InterEventDistribution.INVERSE_GAUSSIAN,
     ar_order=3,
     hasTheta0=True,
@@ -32,7 +40,7 @@ mocked_maximizers_dict = {
 }
 
 
-class TestPointProcess(TestCase):
+class TestRegression(TestCase):
     @patch.dict("pp.regression.maximizers_dict", mocked_maximizers_dict)
     def test_regr_likel(self):
         events = np.linspace(1, 30, 15)

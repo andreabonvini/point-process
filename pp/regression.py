@@ -1,8 +1,8 @@
 import numpy as np
 
+from pp.core.distributions import events2interevents
 from pp.core.maximizers import InverseGaussianMaximizer
 from pp.core.model import InterEventDistribution, PointProcessDataset, PointProcessModel
-from pp.core.utils import events2interevents
 
 maximizers_dict = {
     InterEventDistribution.INVERSE_GAUSSIAN.value: InverseGaussianMaximizer

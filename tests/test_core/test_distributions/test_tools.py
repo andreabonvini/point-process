@@ -1,9 +1,8 @@
 from unittest import TestCase
-from unittest.mock import patch
 
 import numpy as np
 
-from pp.core.utils import events2interevents, load, plot_intervals
+from pp.core.distributions import events2interevents
 
 
 class TestUtils(TestCase):
@@ -15,14 +14,3 @@ class TestUtils(TestCase):
     def test_events2interevents(self):
         res = events2interevents(self.events)
         self.assertEqual(res.all(), self.inter_event_times.all())
-
-    def test_load(self):
-        path = "tests/data/Y2.csv"
-        r = load(path)
-        assert r.shape == (733,)
-
-    @patch("pp.core.utils.plt.plot")
-    def test_plot_intervals(self, plot):
-        plot.return_value = True
-        plot_intervals(self.events)
-        plot.assert_called_once()
