@@ -60,7 +60,7 @@ class InterEventDistribution(Enum):
 
 #### `WeightsProducers`
 
-In order to weight the samples of our dataset (e.g. giving more importance to more recent samples) supplying `regr_likel`  with a third argument `weights_producer`.
+In order to weight the samples of our dataset (e.g. giving more importance to more recent samples) we can supply `regr_likel`  with a third argument `weights_producer`.
 
 ```python
 # regr_likel signature:
@@ -75,10 +75,8 @@ We have two types of `WeightsProducers`:
 
 - `ConstantWeightsProducer`: weights the samples by the same amount (i.e. `1`)
 
-- `ExponentialWeightsProducer`: weights the samples with a decreasing exponential function
-	$$
-	w(t) = e^{-\alpha t}
-	$$
+- `ExponentialWeightsProducer`: weights the samples with a decreasing exponential function `w(t)=exp(-alpha*t)`
+
 	where $t$ is the time distance from the most recent sample's target interval.
 
 	```python
