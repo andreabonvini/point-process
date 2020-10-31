@@ -35,7 +35,7 @@ class PointProcessModel:
     ):
         """
         Args:
-            model: actual model which yield a PointProcessResult
+            model: actual model which yields a PointProcessResult
             expected_shape: expected input shape to feed the PointProcessModel with
             theta: final AR parameters.
             k: final shape parameter (aka lambda).
