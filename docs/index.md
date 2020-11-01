@@ -1,4 +1,4 @@
-# `pplib` - The Point Process Library
+# `point-process (pp)`
 
 This site contains the *scientific* and `code` documentation for [pplib](https://github.com/andreabonvini/pplib), a `python` library for *Point Process Analysis*.
 
