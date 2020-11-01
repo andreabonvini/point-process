@@ -66,7 +66,7 @@ class PointProcessModel:
             f">"
         )
 
-    def __call__(self, inter_event_times: np.ndarray):
+    def __call__(self, inter_event_times: np.ndarray) -> PointProcessResult:
         return self._model(inter_event_times)
 
 
