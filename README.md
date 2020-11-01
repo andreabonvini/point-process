@@ -24,7 +24,7 @@ pipenv sync
 
 ### Documentation
 
-The technical and scientific *documentation* for this repository can be found [here](https://andreabonvini.github.io/pplib/).
+The technical and scientific *documentation* for this repository can be found [here](https://andreabonvini.github.io/point-process/).
 
 ### Usage example
 
