@@ -206,7 +206,6 @@ def compute_invgauss_negloglikel_hessian(
     returns the vector of the second-derivatives of the negloglikelihood w.r.t to each
     parameter
     """
-
     n, m = xn.shape
     # Retrieve the useful variables
     k, theta = params[0], params[1:].reshape((m, 1))

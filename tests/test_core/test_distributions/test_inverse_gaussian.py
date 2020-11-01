@@ -2,7 +2,6 @@ from unittest import TestCase
 
 import numpy as np
 
-from data import InverseGaussianTestData
 from pp.core.distributions.inverse_gaussian import (
     build_ig_model,
     compute_invgauss_negloglikel,
@@ -11,15 +10,16 @@ from pp.core.distributions.inverse_gaussian import (
     inverse_gaussian,
     likel_invgauss_consistency_check,
 )
+from tests import DatasetTestData
 
 
 class TestInverseGaussian(TestCase):
     def setUp(self) -> None:
-        data = InverseGaussianTestData()
+        data = DatasetTestData()
         self.inter_events_times = data.inter_events_times
         self.p = data.p
         self.xn = data.xn
-        self.n, _ = data.xn.shape
+        self.n, self.m = data.xn.shape
         self.wn = data.wn
         self.k = data.k
         self.theta = data.theta
@@ -117,10 +117,10 @@ class TestInverseGaussian(TestCase):
 
     def test_compute_invgauss_negloglikel_grad(self):
         res = compute_invgauss_negloglikel_grad(self.params, self.xn, self.wn, self.eta)
-        assert res.shape == (self.n + 1,)
+        assert res.shape == (self.m + 1,)
 
     def test_compute_invgauss_negloglikel_hessian(self):
         res = compute_invgauss_negloglikel_hessian(
             self.params, self.xn, self.wn, self.eta
         )
-        assert res.shape == (self.n + 1, self.n + 1)
+        assert res.shape == (self.m + 1, self.m + 1)

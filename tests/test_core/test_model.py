@@ -2,13 +2,13 @@ from unittest import TestCase
 
 import numpy as np
 
-from data import InverseGaussianTestData
 from pp.core.model import PointProcessDataset
+from tests import DatasetTestData
 
 
 class TestModel(TestCase):
     def setUp(self) -> None:
-        self.data = InverseGaussianTestData()
+        self.data = DatasetTestData()
 
     def test_dataset_load(self):
         dataset = PointProcessDataset.load(self.data.inter_events_times, self.data.p)
