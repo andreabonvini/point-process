@@ -12,7 +12,7 @@ with open("Pipfile.lock") as fd:
     ]
 
 setup(
-    name="pplib",
+    name="point-process",
     version="0.1",
     packages=find_packages(exclude=["*.tests", "*.tests.*", "tests.*", "tests"]),
     install_requires=install_requires,
