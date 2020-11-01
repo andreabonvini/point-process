@@ -1,13 +1,23 @@
-# PPLIB - The Point Process Library
+# `point-process(pp)` - The Point Process Library
 
 This repository contains a `Python` implementation of the `MATLAB` software provided by Riccardo Barbieri and Luca Citi at [this](http://users.neurostat.mit.edu/barbieri/pphrv) link.
 
-#### Setup
+### Installation
+
+##### Install with pip
 
 ```
+pip install point-process
+```
+
+##### Install from source
+
+```
+# clone repo
+git clone https://github.com/andreabonvini/point-process.git
+cd point-process
 # Install dependencies
 pipenv install --dev
-
 # Update dependencies
 pipenv sync
 ```

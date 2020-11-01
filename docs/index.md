@@ -19,9 +19,9 @@ The *code documentation* consists of a series of code snippets showing the usage
 - [Inverse Gaussian: How to *derive* the *gradient* vector and *hessian* matrix for maximum likelihood estimation.](theory_docs/Inverse Gaussian - Gradient and Hessian - Derivation.html)
 - [Inverse Gaussian: How to *compute* the *gradient* vector and *hessian* matrix for maximum likelihood estimation.](theory_docs/Inverse Gaussian - Gradient and Hessian - Computation.html)
 
-## Code Documentation
+## Quick Tour
 
-#### Usage
+#### `Usage`
 
 ```python
 from pp import InterEventDistribution, PointProcessDataset
@@ -77,7 +77,7 @@ We have two types of `WeightsProducers`:
 
 - `ExponentialWeightsProducer`: weights the samples with a decreasing exponential function `w(t)=exp(-alpha*t)`
 
-	where $t$ is the time distance from the most recent sample's target interval.
+	where `t` is the time distance from the most recent sample's target interval.
 
 	```python
 	class ExponentialWeightsProducer(WeightsProducer):
