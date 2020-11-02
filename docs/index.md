@@ -2,9 +2,13 @@
 
 This site contains the *scientific* and `code` documentation for [point-process](https://github.com/andreabonvini/point-process), a `python` library for *Point Process Analysis*.
 
-The *scientific documentation* consists of a series of quick blog-posts explaining the theoretical details behind the algorithmic implementation.
+`e.g. Real-time RR intervals distribution estimation:`
 
-The *code documentation* consists of a series of code snippets showing the usage of the library.
+![](videos/RealTimeIG.mov)
+
+
+
+The *scientific documentation* consists of a series of quick blog-posts explaining the theoretical details behind the algorithmic implementation.
 
 ## Scientific Documentation
 
