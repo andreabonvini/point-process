@@ -2,10 +2,6 @@
 
 This repository contains a `Python` implementation of the `MATLAB` software provided by Riccardo Barbieri and Luca Citi at [this](http://users.neurostat.mit.edu/barbieri/pphrv) link.
 
-*Real-time RR-intervals distribution estimation:*
-
-![](docs/videos/RealTimeIG.mov)
-
 ### Installation
 
 ##### Install with pip

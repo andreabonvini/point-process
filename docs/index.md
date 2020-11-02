@@ -1,12 +1,13 @@
 # `point-process (pp)`
 
-This site contains the *scientific* and `code` documentation for [point-process](https://github.com/andreabonvini/point-process), a `python` library for *Point Process Analysis*.
+This site contains the *scientific* and `code ` documentation for [point-process](https://github.com/andreabonvini/point-process), a `python` library for *Point Process Analysis*.
 
 `e.g. Real-time RR intervals distribution estimation:`
 
-![](videos/RealTimeIG.mov)
-
-
+<video width="600" height="400" controls>
+  <source src="https://andreabonvini.github.io/point-process/videos/RealTimeIG.mov" type="video/mp4">
+Your browser does not support the video tag.
+</video>
 
 The *scientific documentation* consists of a series of quick blog-posts explaining the theoretical details behind the algorithmic implementation.
 
