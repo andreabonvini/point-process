@@ -121,5 +121,10 @@ class InverseGaussianMaximizer(PointProcessMaximizer, ABC):
         )
 
         return build_ig_model(
-            thetap_params, k_param, self.dataset.hasTheta0, results, params_history
+            thetap_params,
+            k_param,
+            self.dataset.wn,
+            self.dataset.hasTheta0,
+            results,
+            params_history,
         )

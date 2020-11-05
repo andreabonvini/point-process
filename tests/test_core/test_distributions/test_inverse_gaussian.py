@@ -10,7 +10,7 @@ from pp.core.distributions.inverse_gaussian import (
     inverse_gaussian,
     likel_invgauss_consistency_check,
 )
-from tests import DatasetTestData
+from tests.data import DatasetTestData
 
 
 class TestInverseGaussian(TestCase):
@@ -79,8 +79,9 @@ class TestInverseGaussian(TestCase):
         theta = np.ones(ar_order + 1) / (ar_order + 1)
         k = 1.00
         results = [0.8, 0.3, 0.1]
+        wn = np.array([[1], [2], [3], [4], [5]])
         params_history = [theta, theta, theta]
-        pp_model = build_ig_model(theta, k, hasTheta0, results, params_history)
+        pp_model = build_ig_model(theta, k, wn, hasTheta0, results, params_history)
         inter_event_times = np.ones((ar_order,))
         res = pp_model(inter_event_times)
         self.assertEqual(res.mu, 1.00)
@@ -92,8 +93,9 @@ class TestInverseGaussian(TestCase):
         theta = np.ones(ar_order + 1) / (ar_order + 1)
         k = 1.00
         results = [0.8, 0.3, 0.1]
+        wn = np.array([[1], [2], [3], [4], [5]])
         params_history = [theta, theta, theta]
-        pp_model = build_ig_model(theta, k, hasTheta0, results, params_history)
+        pp_model = build_ig_model(theta, k, wn, hasTheta0, results, params_history)
         wrong_shape_inter_event_times = np.ones((ar_order + 1,))
         with self.assertRaises(ValueError):
             pp_model(wrong_shape_inter_event_times)
