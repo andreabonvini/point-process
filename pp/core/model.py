@@ -30,6 +30,7 @@ class PointProcessModel:
         results: List[float],
         params_history: List[np.ndarray],
         distribution: InterEventDistribution,
+        wn: np.ndarray,
         ar_order: int,
         hasTheta0: bool,
     ):
@@ -42,6 +43,7 @@ class PointProcessModel:
             results: negative log-likelihood values obtained during the optimization process (should diminuish in time).
             params_history: list of parameters obtained during the optimization process
             distribution: fitting distribution used to train the model.
+            wn: target inter-events times used to train the model.
             ar_order: AR order used to train the model
             hasTheta0: if the model was trained with theta0 parameter
         """
@@ -52,6 +54,7 @@ class PointProcessModel:
         self.results = results
         self.params_history = params_history
         self.distribution = distribution
+        self.wn = wn
         self.ar_order = ar_order
         self.hasTheta0 = hasTheta0
 

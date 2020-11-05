@@ -54,6 +54,7 @@ class InverseGaussianConstraints(PointProcessConstraint, ABC):
 def build_ig_model(
     theta: np.ndarray,
     k: float,
+    wn: np.array,
     hasTheta0: bool,
     results: List[float],
     params_history: List[np.ndarray],
@@ -84,6 +85,7 @@ def build_ig_model(
         results=results,
         params_history=params_history,
         distribution=InterEventDistribution.INVERSE_GAUSSIAN,
+        wn=wn,
         ar_order=expected_shape[0],
         hasTheta0=hasTheta0,
     )
