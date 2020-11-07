@@ -2,7 +2,7 @@ from unittest import TestCase
 
 import numpy as np
 
-from pp.core.model import PointProcessDataset
+from pp.model import PointProcessDataset
 from tests.data import DatasetTestData
 
 

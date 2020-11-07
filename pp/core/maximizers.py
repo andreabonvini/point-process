@@ -12,15 +12,15 @@ from pp.core.distributions.inverse_gaussian import (
     compute_invgauss_negloglikel_hessian,
     likel_invgauss_consistency_check,
 )
-from pp.core.model import (
+from pp.core.weights_producers import (
+    ConstantWeightsProducer,
+    ExponentialWeightsProducer,
+)
+from pp.model import (
     PointProcessDataset,
     PointProcessMaximizer,
     PointProcessModel,
     WeightsProducer,
-)
-from pp.core.weights_producers import (
-    ConstantWeightsProducer,
-    ExponentialWeightsProducer,
 )
 
 params_history = []

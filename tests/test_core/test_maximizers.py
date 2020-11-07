@@ -6,7 +6,7 @@ from scipy.optimize.optimize import OptimizeResult
 
 from pp import ExponentialWeightsProducer
 from pp.core.maximizers import InverseGaussianMaximizer
-from pp.core.model import PointProcessDataset, PointProcessModel
+from pp.model import PointProcessDataset, PointProcessModel
 
 
 class TestMaximizers(TestCase):

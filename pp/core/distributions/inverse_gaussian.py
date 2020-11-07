@@ -4,7 +4,7 @@ from typing import List, Union
 import numpy as np
 from scipy.optimize import LinearConstraint
 
-from pp.core.model import (
+from pp.model import (
     InterEventDistribution,
     PointProcessConstraint,
     PointProcessModel,

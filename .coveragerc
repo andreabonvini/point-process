@@ -3,7 +3,7 @@ source =
        pp
 omit =
     # spectral is not tested yet, do it!
-    pp/core/spectral.py
+    pp/spectral.py
 
 
 [report]
