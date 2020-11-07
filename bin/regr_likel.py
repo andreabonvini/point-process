@@ -9,7 +9,7 @@ import pandas as pd
 
 from pp import InterEventDistribution
 from pp.core.distributions import events2interevents
-from pp.core.model import PointProcessDataset
+from pp.model import PointProcessDataset
 from pp.regression import regr_likel
 
 if __name__ == "__main__":

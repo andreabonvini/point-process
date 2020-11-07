@@ -4,7 +4,7 @@ from typing import List
 
 import numpy as np
 
-from pp.core.model import PointProcessModel
+from pp.model import PointProcessModel
 
 
 @dataclass()
@@ -28,6 +28,20 @@ class SpectralAnalysis:
     comps: List[List[complex]]
 
 
+@dataclass
+class HeartRateVariabilityIndices:
+    powVLF: float
+    powLF: float
+    powHF: float
+
+
+def hrv_indices(analysis: SpectralAnalysis) -> HeartRateVariabilityIndices:
+    powVLF = sum(p.power for p in analysis.poles if np.abs(p.frequency) <= 0.04)
+    powLF = sum(p.power for p in analysis.poles if 0.04 < np.abs(p.frequency) <= 0.15)
+    powHF = sum(p.power for p in analysis.poles if 0.15 < np.abs(p.frequency) < 0.45)
+    return HeartRateVariabilityIndices(powVLF, powLF, powHF)
+
+
 class SpectralAnalyzer:
     def __init__(self, model: PointProcessModel, aggregate: bool = True):
         """
@@ -39,9 +53,6 @@ class SpectralAnalyzer:
         """
         self.model = model
         self.aggregate = aggregate
-
-    def hrv_indices(self):
-        pass
 
     def psd(self) -> SpectralAnalysis:
         """

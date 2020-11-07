@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 
-from pp.core.model import (
+from pp.model import (
     InterEventDistribution,
     PointProcessDataset,
     PointProcessMaximizer,

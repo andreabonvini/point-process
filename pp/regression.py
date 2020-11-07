@@ -1,6 +1,6 @@
 from pp import ExponentialWeightsProducer
 from pp.core.maximizers import InverseGaussianMaximizer
-from pp.core.model import (
+from pp.model import (
     InterEventDistribution,
     PointProcessDataset,
     PointProcessModel,

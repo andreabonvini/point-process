@@ -1,6 +1,6 @@
 import numpy as np
 
-from pp.core.model import WeightsProducer
+from pp.model import WeightsProducer
 
 
 class ConstantWeightsProducer(WeightsProducer):
