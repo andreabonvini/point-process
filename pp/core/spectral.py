@@ -1,31 +1,49 @@
-from copy import deepcopy  # pragma: no cover
-from typing import List, NamedTuple  # pragma: no cover
+from copy import deepcopy
+from dataclasses import dataclass
+from typing import List
 
-import numpy as np  # pragma: no cover
+import numpy as np
 
-from pp.core.model import PointProcessModel  # pragma: no cover
+from pp.core.model import PointProcessModel
 
 
-class Pole(NamedTuple):  # pragma: no cover
+@dataclass()
+class Pole:
+    """
+    Pole or pair of conjugate poles,
+    """
+
     # TODO add Documentation
     pos: complex  # position on the complex plane
-    frequency: float
-    power: float
-    residual: float
-    comps: List[complex]  # spectral components for the specific pole
+    frequency: float  # pragma: no cover
+    power: float  # pragma: no cover
+    residual: float  # pragma: no cover
 
 
-class SpectralAnalysis(NamedTuple):  # pragma: no cover
+@dataclass
+class SpectralAnalysis:
     frequencies: np.array  # Hz
-    powers: np.array  # mm^2 / Hz
+    powers: np.array  # ms^2 / Hz
     poles: List[Pole]
+    comps: List[List[complex]]
 
 
-class SpectralAnalyzer:  # pragma: no cover
-    def __init__(self, model: PointProcessModel):  # pragma: no cover
+class SpectralAnalyzer:
+    def __init__(self, model: PointProcessModel, aggregate: bool = True):
+        """
+        Args:
+            model: Trained PointProcessModel, we'll use the AR parameters learnt by this model in order to conduct
+            the spectral analysis.
+            aggregate: if True, poles' powers will be aggregated with
+            their corresponding complex conjugate
+        """
         self.model = model
+        self.aggregate = aggregate
 
-    def psd(self) -> SpectralAnalysis:  # pragma: no cover
+    def hrv_indices(self):
+        pass
+
+    def psd(self) -> SpectralAnalysis:
         """
         Compute Power Spectral Density for the given model.
         """
@@ -51,8 +69,7 @@ class SpectralAnalyzer:  # pragma: no cover
         poles_values = mod_scale * poles_values
         thetap = thetap * np.cumprod(np.ones(thetap.shape) * mod_scale)
 
-        nf = 1024
-        fs = np.linspace(0, 0.5, nf)  # normalized freq
+        fs = np.linspace(-0.5, 0.5, 2048)
         # z = e^(-2πfT)
         # z: unit delay operator
         z = np.exp(2j * np.pi * fs)
@@ -81,15 +98,26 @@ class SpectralAnalyzer:  # pragma: no cover
             refpp = -np.conj(poles_residuals[i]) * ref_poles[i] / (z - ref_poles[i])
             poles_comps.append(var / fsamp * (pp + refpp))
 
+        poles_comps_agg = [deepcopy(poles_comps[0])]
+
+        # Aggregate complex conjugate poles in poles_comps_agg
+
+        for i in range(1, len(poles_values)):
+            if np.isclose(poles_values[i], np.conj(poles_values[i - 1])):
+                poles_comps_agg[-1] += poles_comps[i]
+            else:
+                poles_comps_agg.append(deepcopy(poles_comps[i]))
+
         poles = [
-            Pole(pos, freq, power, res, comps)
-            for pos, freq, power, res, comps in zip(
-                poles_values,
-                poles_frequencies,
-                poles_powers,
-                poles_residuals,
-                poles_comps,
+            Pole(pos, freq, power, res)
+            for pos, freq, power, res in zip(
+                poles_values, poles_frequencies, poles_powers, poles_residuals,
             )
         ]
 
-        return SpectralAnalysis(frequencies, powers, poles)
+        return SpectralAnalysis(
+            frequencies,
+            powers,
+            poles,
+            poles_comps_agg if self.aggregate else poles_comps,
+        )
