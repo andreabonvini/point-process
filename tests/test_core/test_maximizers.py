@@ -4,7 +4,6 @@ from unittest.mock import Mock, patch
 import numpy as np
 from scipy.optimize.optimize import OptimizeResult
 
-from pp import ExponentialWeightsProducer
 from pp.core.maximizers import InverseGaussianMaximizer
 from pp.model import PointProcessDataset, PointProcessModel
 
@@ -22,12 +21,13 @@ class TestMaximizers(TestCase):
             ]
         )
 
-        self.m, self.n = self.xn.shape
+        self.n, self.m = self.xn.shape
+        self.eta = np.ones((self.n, 1))
         self.hasTheta0 = True
-        self.p = self.n - 1
-        self.wn = np.ones((self.m, 1))
+        self.p = self.m - 1
+        self.wn = np.ones((self.n, 1))
         self.params = np.vstack(
-            [0.5, np.ones((self.m, 1)), np.ones((self.n, 1))]
+            [0.5, np.ones((self.n, 1)), np.ones((self.m, 1))]
         ).squeeze(1)
 
     @patch("pp.core.maximizers.minimize")
@@ -37,6 +37,8 @@ class TestMaximizers(TestCase):
         mock_res.nit = 100
         mock_res.success = True
         minim.return_value = mock_res
-        dataset = PointProcessDataset(self.xn, self.wn, self.p, self.hasTheta0)
-        res = InverseGaussianMaximizer(dataset, ExponentialWeightsProducer()).train()
+        dataset = PointProcessDataset(
+            self.xn, self.wn, self.p, self.hasTheta0, self.eta
+        )
+        res = InverseGaussianMaximizer(dataset).train()
         self.assertIsInstance(res, PointProcessModel)

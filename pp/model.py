@@ -1,10 +1,12 @@
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Callable, List, Union
+from typing import Callable, List, Optional, Union
 
 import numpy as np
 from scipy.linalg import toeplitz
 from scipy.optimize import LinearConstraint, NonlinearConstraint
+
+from pp import ExponentialWeightsProducer
 
 
 class InterEventDistribution(Enum):
@@ -74,30 +76,68 @@ class PointProcessModel:
 
 
 class PointProcessDataset:
-    def __init__(self, xn: np.ndarray, wn: np.ndarray, p: int, hasTheta0: bool):
+    def __init__(
+        self,
+        xn: np.ndarray,
+        wn: np.ndarray,
+        p: int,
+        hasTheta0: bool,
+        eta: np.array,
+        xt: Optional[np.array] = None,
+        wt: Optional[float] = None,
+    ):
+        """
+
+        Args:
+            xn:
+            wn: target values for the given dataset
+            p: AR order
+            hasTheta0: whether or not the AR model has a theta0 constant to account for the average mu.
+            eta: weights for each sample.
+            xt: is a vector 1xN of regressors, for the censoring part. (IF RIGHT-CENSORING)  # FIXME what's N
+            wt: is the current value of the future observation. (IF RIGHT-CENSORING) # FIXME which one is right?
+            wt: if right_censoring is applied, wt represents the distance (in seconds) between the last observed
+            event and the current evaluation time (evaluation time > last observed event) # FIXME which one is right?
+        """
         self.xn = xn
         self.wn = wn
         self.p = p
         self.hasTheta0 = hasTheta0
+        self.eta = eta
+        self.xt = xt
+        self.wt = wt
+        if wt is not None:
+            assert wt >= 0
 
     def __repr__(self):
-        return f"<PointProcessDataset: <xn.shape={self.xn.shape}> <wn.shape={self.wn.shape}> <hasTheta0={self.hasTheta0}>>"
+        return (
+            f"<PointProcessDataset:\n"
+            f"    <xn.shape={self.xn.shape}>\n"
+            f"    <wn.shape={self.wn.shape}>\n"
+            f"    <hasTheta0={self.hasTheta0}>>"
+        )
 
     @classmethod
-    def load(cls, inter_events_times: np.ndarray, p: int, hasTheta0: bool = True):
+    def load(
+        cls,
+        event_times: np.ndarray,
+        p: int,
+        hasTheta0: bool = True,
+        weights_producer: ExponentialWeightsProducer = ExponentialWeightsProducer(),
+        right_censoring: bool = False,
+        current_time: Optional[float] = None,
+    ):
         """
 
         Args:
-            inter_events_times: np.ndarray of inter-events times expressed in ms.
+            event_times: np.ndarray of event times expressed in s.
             p: AR order
             hasTheta0: whether or not the AR model has a theta0 constant to account for the average mu.
-
-        Returns:
-            PointProcessDataset where:
-                xn.shape : (len(events)-p,p) or (len(events)-p,p+1) if hasTheta0 is set to True.
-                wn-shape : (len(events)-p,1).
-                each row of xn is associated to the corresponding element of wn.
+            weights_producer: WeightsProducer object
+            right_censoring: whether right-censoring is applied or not
+            current_time: if right-censoring is applied, the current time at which we are evaluating our model
         """
+        inter_events_times = np.diff(event_times)
         # wn are the target inter-event intervals, i.e. the intervals we have to predict once we build our
         # RR autoregressive model.
         wn = inter_events_times[p:]
@@ -109,10 +149,23 @@ class PointProcessDataset:
         # Note that the 1 at the beginning of each row is added only if the hasTheta0 parameter is set to True.
         a = inter_events_times[p - 1 : -1]
         b = inter_events_times[p - 1 :: -1]
+        if right_censoring:
+            xt = inter_events_times[-p:][::-1].reshape(1, -1)
+            xt = np.hstack([[[1.0]], xt]) if hasTheta0 else xt
+            # FIXME remove
+            wt = current_time - event_times[-1]
+        else:
+            xt = wt = None
         xn = toeplitz(a, b)
-        if hasTheta0:
-            xn = np.hstack([np.ones(wn.shape), xn])
-        return cls(xn, wn, p, hasTheta0)
+        xn = np.hstack([np.ones(wn.shape), xn]) if hasTheta0 else xn
+        uk = event_times[p + 1 :]
+        if current_time is None:
+            # In case current_time was not provided we suppose we are evaluating our model at t = last observed event
+            current_time = event_times[-1]
+
+        eta = weights_producer(current_time - uk)
+
+        return cls(xn, wn, p, hasTheta0, eta, xt, wt)
 
 
 class PointProcessConstraint(ABC):  # pragma: no cover
@@ -130,15 +183,4 @@ class PointProcessConstraint(ABC):  # pragma: no cover
 class PointProcessMaximizer(ABC):  # pragma: no cover
     @abstractmethod
     def train(self) -> PointProcessModel:
-        pass
-
-
-class WeightsProducer(ABC):  # pragma: no cover
-    # FIXME mypy fails if abstract __call__ is defined
-    # @abstractmethod
-    # def __call__(self, *args, **kwargs) -> np.ndarray:
-    #   return self._compute_weights()
-
-    @abstractmethod
-    def _compute_weights(self) -> np.ndarray:
         pass
