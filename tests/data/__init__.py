@@ -4,7 +4,7 @@ import pandas as pd
 
 class DatasetTestData:
     def __init__(self):
-        self.events = np.array([300.0, 600.0, 1000.0, 1450.0, 1700.0, 2100.0, 2500.0])
+        self.events = np.array([300.0, 600.0, 1000.0, 1450.0, 1700.0, 2100.0, 2600.0])
         self.inter_events_times = np.array([300.0, 400.0, 450.0, 250.0, 400.0, 500.0])
         self.p = 3
         self.wn = np.array([[250.0], [400.0], [500.0]])
@@ -26,5 +26,6 @@ class SpectralData:
     def __init__(self):
         df = pd.read_csv("tests/data/Y2.pre.txt", sep=" ")
         rr = np.array(df["RR"])[75:300]
+        self.rr = rr
         self.diff = np.diff(rr)
         self.expected_poles = []

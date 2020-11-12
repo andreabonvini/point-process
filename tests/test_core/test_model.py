@@ -11,6 +11,6 @@ class TestModel(TestCase):
         self.data = DatasetTestData()
 
     def test_dataset_load(self):
-        dataset = PointProcessDataset.load(self.data.inter_events_times, self.data.p)
+        dataset = PointProcessDataset.load(self.data.events, self.data.p)
         np.testing.assert_array_equal(dataset.xn, self.data.xn)
         np.testing.assert_array_equal(dataset.wn, self.data.wn)

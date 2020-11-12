@@ -1,19 +1,8 @@
 import numpy as np
 
-from pp.model import WeightsProducer
 
-
-class ConstantWeightsProducer(WeightsProducer):
-    def __call__(self, n: int) -> np.ndarray:
-        self.n = n
-        return self._compute_weights()
-
-    def _compute_weights(self) -> np.ndarray:
-        return np.ones((self.n, 1))
-
-
-class ExponentialWeightsProducer(WeightsProducer):
-    def __init__(self, alpha: float = 0.005):
+class ExponentialWeightsProducer:
+    def __init__(self, alpha: float = 0.98):
         """
         Args:
             alpha: Weighting time constant that governs the degree of influence
@@ -21,15 +10,9 @@ class ExponentialWeightsProducer(WeightsProducer):
         """
         self.alpha = alpha
 
-    def __call__(self, target_intervals: np.ndarray) -> np.ndarray:
-        """
-            Args:
-                target_intervals:
-                    Target intervals vector (as stored in PointProcessDataset.wn)
-        """
-        self.target_intervals = target_intervals
+    def __call__(self, target_distances: np.ndarray) -> np.ndarray:
+        self.target_distances = target_distances
         return self._compute_weights()
 
     def _compute_weights(self) -> np.ndarray:
-        target_times = np.cumsum(self.target_intervals) - self.target_intervals[0]
-        return np.exp(-self.alpha * target_times).reshape(-1, 1)[::-1]
+        return np.exp(np.log(self.alpha) * self.target_distances).reshape(-1, 1)
