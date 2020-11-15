@@ -44,6 +44,15 @@ class InverseGaussianMaximizer(PointProcessMaximizer, ABC):
         )
 
     def train(self) -> PointProcessModel:
+        """
+
+        Info:
+            This function implements the optimization process suggested by Riccardo Barbieri, Eric C. Matten,
+            Abdul Rasheed A. Alabi. and Emery N. Brown in the paper:
+            "A point-process model of human heartbeat intervals: new definitions
+            of heart rate and heart rate variability"
+
+        """
 
         params_history = []
         results = []

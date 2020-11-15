@@ -83,6 +83,11 @@ def regr_likel_pipeline(
 
     Returns:
         a PipelineResult object.
+
+    Info:
+        This function implements the pipeline suggested by Riccardo Barbieri, Eric C. Matten, Abdul Rasheed A. Alabi,
+        and Emery N. Brown in the paper:
+        "A point-process model of human heartbeat intervals: new definitions of heart rate and heart rate variability"
     """
     # We want the first event to be at time 0
     events = event_times - event_times[0]
