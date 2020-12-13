@@ -6,22 +6,23 @@ from scipy.optimize import minimize
 
 from pp.core.distributions.inverse_gaussian import (
     InverseGaussianConstraints,
-    build_ig_model,
     compute_invgauss_negloglikel,
     compute_invgauss_negloglikel_grad,
     compute_invgauss_negloglikel_hessian,
     likel_invgauss_consistency_check,
 )
-from pp.model import PointProcessDataset, PointProcessMaximizer, PointProcessModel
+from pp.model import PointProcessDataset, PointProcessMaximizer, PointProcessResult
 
 
 class InverseGaussianMaximizer(PointProcessMaximizer, ABC):
     def __init__(
         self,
         dataset: PointProcessDataset,
-        max_steps: int = 1000,
+        max_steps: int = 500,
         theta0: Optional[np.array] = None,
         k0: Optional[float] = None,
+        verbose: bool = False,
+        save_history: bool = False,
     ):
         """
             Args:
@@ -30,6 +31,9 @@ class InverseGaussianMaximizer(PointProcessMaximizer, ABC):
                 theta0: is a vector of shape (p,1) (or (p+1,1) if teh dataset was created with the hasTheta0 option)
                  of coefficients used as starting point for the optimization process.
                 k0: is the starting point for the scale parameter (sometimes called lambda).
+                verbose: If True convergenee information will be displayed
+                save_history: If True the PointProcessResult returned by the train() routine will contain additional / useful
+                              information about the training process. (Check the definition of PointProcessResult for details)
             Returns:
                 PointProcessModel
             """
@@ -38,12 +42,14 @@ class InverseGaussianMaximizer(PointProcessMaximizer, ABC):
         self.theta0 = theta0
         self.k0 = k0
         self.n, self.m = self.dataset.xn.shape
+        self.verbose = verbose
+        self.save_history = save_history
         # Some consistency checks
         likel_invgauss_consistency_check(
             self.dataset.xn, self.dataset.wn, self.dataset.xt, self.theta0
         )
 
-    def train(self) -> PointProcessModel:
+    def train(self) -> PointProcessResult:
         """
 
         Info:
@@ -65,11 +71,11 @@ class InverseGaussianMaximizer(PointProcessMaximizer, ABC):
             )
             params_history.append(params)
 
-        # TODO change initialization
+        # TODO change initialization (maybe?)
         if self.theta0 is None:
             self.theta0 = np.ones((self.m, 1)) / self.m
         if self.k0 is None:
-            self.k0 = 1200
+            self.k0 = 1700
 
         # In order to optimize the parameters with scipy.optimize.minimize we need to pack all of our parameters in a
         # vector of shape (1+p,) or (1+1+p,) if hasTheta0
@@ -79,6 +85,8 @@ class InverseGaussianMaximizer(PointProcessMaximizer, ABC):
         # it's ok to have cons as a list of LinearConstrainsts if we're using the "trust-constr" method,
         # don't trust scipy.optimize.minimize documentation.
 
+        # remove tol parameter to see right-censoring peaks BUT-> time-complexity X10
+        # decrease tol to 0.025 to faster results.
         optimization_result = minimize(
             fun=compute_invgauss_negloglikel,
             x0=params0,
@@ -86,25 +94,45 @@ class InverseGaussianMaximizer(PointProcessMaximizer, ABC):
             jac=compute_invgauss_negloglikel_grad,
             hess=compute_invgauss_negloglikel_hessian,
             constraints=cons,
-            args=(self.dataset.xn, self.dataset.wn, self.dataset.eta),
+            tol=0.0125,
+            args=(
+                self.dataset.xn,
+                self.dataset.wn,
+                self.dataset.eta,
+                self.dataset.xt,
+                self.dataset.wt,
+            ),
             options={"maxiter": self.max_steps, "disp": False},
-            callback=_save_history,
+            callback=_save_history if self.save_history else None,
         )
-        print(f"Number of iterations: {optimization_result.nit}")
-        print(
-            f"Optimization process outcome: {'Success' if optimization_result.success else 'Failed'}"
-        )
+
+        if self.verbose:  # pragma: no cover
+            print(
+                f"\rNumber of iterations: {optimization_result.nit}\n"
+                f"Optimization process outcome: {'Success' if optimization_result.success else 'Failed'}"
+            )
         optimal_parameters = optimization_result.x
         k_param, thetap_params = (
             optimal_parameters[0],
             optimal_parameters[1 : 1 + self.m],
         )
 
-        return build_ig_model(
+        # Compute prediction
+        mu = np.dot(self.dataset.xt, thetap_params.reshape(-1, 1))[0, 0]
+        # Compute sigma
+        sigma = mu ** 3 / k_param
+
+        return PointProcessResult(
+            self.dataset.hasTheta0,
             thetap_params,
             k_param,
-            self.dataset.wn,
-            self.dataset.hasTheta0,
-            results,
-            params_history,
+            self.dataset.current_time,
+            mu,
+            sigma,
+            np.mean(self.dataset.wn),
+            self.dataset.target,
+            results if results else None,
+            np.hstack([params.reshape(-1, 1) for params in params_history])
+            if params_history
+            else None,
         )

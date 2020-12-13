@@ -4,7 +4,7 @@ from typing import List
 
 import numpy as np
 
-from pp.model import PointProcessModel
+from pp.model import PointProcessResult
 
 
 @dataclass()
@@ -36,35 +36,47 @@ class HeartRateVariabilityIndices:
 
 
 def hrv_indices(analysis: SpectralAnalysis) -> HeartRateVariabilityIndices:
-    powVLF = sum(p.power for p in analysis.poles if np.abs(p.frequency) <= 0.04)
-    powLF = sum(p.power for p in analysis.poles if 0.04 < np.abs(p.frequency) <= 0.15)
-    powHF = sum(p.power for p in analysis.poles if 0.15 < np.abs(p.frequency) < 0.45)
+    # FIXME negative spectrum is not allowed obv
+    powVLF = sum(
+        p.power for p in analysis.poles if np.abs(p.frequency) <= 0.04 and p.power > 0
+    )
+    powLF = sum(
+        p.power
+        for p in analysis.poles
+        if 0.04 < np.abs(p.frequency) <= 0.15 and p.power > 0
+    )
+    powHF = sum(
+        p.power
+        for p in analysis.poles
+        if 0.15 < np.abs(p.frequency) < 0.45 and p.power > 0
+    )
     return HeartRateVariabilityIndices(powVLF, powLF, powHF)
 
 
 class SpectralAnalyzer:
-    def __init__(self, model: PointProcessModel, aggregate: bool = True):
+    def __init__(self, result: PointProcessResult, aggregate: bool = True):
         """
         Args:
-            model: Trained PointProcessModel, we'll use the AR parameters learnt by this model in order to conduct
+            result: output of PointProcessMaximizer.train(), we'll use the AR parameters learnt by this model in order to conduct
             the spectral analysis.
             aggregate: if True, poles' powers will be aggregated with
             their corresponding complex conjugate
         """
-        self.model = model
+        self.result = result
         self.aggregate = aggregate
 
     def psd(self) -> SpectralAnalysis:
         """
         Compute Power Spectral Density for the given model.
         """
-        return self._compute_psd(self.model.theta, self.model.wn, self.model.k)
+        return self._compute_psd(
+            self.result.theta, self.result.mean_interval, self.result.k
+        )
 
     def _compute_psd(
-        self, theta: np.ndarray, wn: np.ndarray, k: float
+        self, theta: np.ndarray, mean_interval: float, k: float
     ) -> SpectralAnalysis:  # pragma: no cover
-        thetap = deepcopy(theta[1:]) if self.model.hasTheta0 else deepcopy(theta[:])
-        mean_interval = np.mean(wn)
+        thetap = deepcopy(theta[1:]) if self.result.hasTheta0 else deepcopy(theta[:])
         var = mean_interval ** 3 / k
         var = 1e6 * var  # from [s^2] to [ms^2]
         fsamp = 1 / mean_interval

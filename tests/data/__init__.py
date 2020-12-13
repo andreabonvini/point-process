@@ -24,8 +24,8 @@ class DatasetTestData:
 
 class SpectralData:
     def __init__(self):
-        df = pd.read_csv("tests/data/Y2.pre.txt", sep=" ")
-        rr = np.array(df["RR"])[75:300]
+        df = pd.read_csv("tests/data/test_dataset.csv")
+        rr = np.array(df["RR"])
         self.rr = rr
         self.diff = np.diff(rr)
         self.expected_poles = []
