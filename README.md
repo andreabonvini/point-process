@@ -1,4 +1,4 @@
-# ` point-process(pp)` - The Point Process Library
+![](docs/images/ppbig.png)
 
 This repository contains a `Python` implementation of the `MATLAB` software provided by Riccardo Barbieri and Luca Citi at [this](http://users.neurostat.mit.edu/barbieri/pphrv) link.
 

@@ -1,23 +1,14 @@
 from copy import deepcopy
-from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import numpy as np
 
 from pp.core.maximizers import InverseGaussianMaximizer
-from pp.model import InterEventDistribution, PointProcessDataset, PointProcessModel
+from pp.model import InterEventDistribution, PointProcessDataset, PointProcessResult
 
 maximizers_dict = {
     InterEventDistribution.INVERSE_GAUSSIAN.value: InverseGaussianMaximizer
 }
-
-
-@dataclass
-class PipelineResult:
-    thetaps: List[np.array]
-    ks: List[float]
-    times: List[float]
-    mus: List[float]
 
 
 def regr_likel(
@@ -25,7 +16,9 @@ def regr_likel(
     maximizer_distribution: InterEventDistribution,
     theta0: Optional[np.array] = None,
     k0: Optional[float] = None,
-) -> PointProcessModel:
+    verbose: bool = False,
+    save_history: bool = False,
+) -> PointProcessResult:
     """
     Args:
         dataset: PointProcessDataset containing the specified AR order (p)
@@ -33,13 +26,20 @@ def regr_likel(
         maximizer_distribution: log-likelihood maximization function belonging to the Maximizer enum.
         theta0: starting vector for the theta parameters
         k0: starting value for the k parameter
+        verbose: If True convergence information will be displayed
+        save_history: If True the PointProcessResult returned by the train() routine will contain additional / useful
+                      information about the training process. (Check the definition of PointProcessResult for details)
 
     Returns:
-        Trained PointProcessModel
+        PointProcessResult
     """
 
     return maximizers_dict[maximizer_distribution.value](
-        dataset=dataset, theta0=theta0, k0=k0
+        dataset=dataset,
+        theta0=deepcopy(theta0),
+        k0=deepcopy(k0),
+        verbose=verbose,
+        save_history=save_history,
     ).train()
 
 
@@ -58,7 +58,7 @@ def _pipeline_setup(
     # Find the index of the last event within window_length
     last_event_index = np.where(event_times > window_length)[0][0] - 1
     # Find total number of time bins
-    bins = int(event_times[-1] // delta) + 1
+    bins = int(np.ceil(event_times[-1] / delta))
     # We have to ignore the first window since we have to use it for initialization purposes,
     # we find the number of time bins contained in one window and start our regression process from there.
     bins_in_window = int(np.ceil(window_length / delta))
@@ -71,7 +71,7 @@ def regr_likel_pipeline(
     hasTheta0: bool = True,
     window_length: float = 60.0,
     delta: float = 0.005,
-) -> PipelineResult:
+) -> List[PointProcessResult]:
     """
     Args:
         event_times: event times expressed in seconds.
@@ -105,10 +105,7 @@ def regr_likel_pipeline(
     thetap = None
     k = None
     # Initialize result lists
-    all_thetas = []
-    all_ks = []
-    all_times = []
-    all_mus = []
+    all_results = []
     for bin_index in range(
         bins_in_window, bins + 1
     ):  # bins + 1 since we want to include the last one!
@@ -134,11 +131,22 @@ def regr_likel_pipeline(
             observed_events = np.append(observed_events, events[last_event_index])
             # Force re-evaluation of starting point for thetap
             thetap = None
+
+        # Let's save the target event for the current time bin
+        if last_event_index < len(events) - 1:
+            target = events[last_event_index + 1] - events[last_event_index]
+        else:
+            # We can't know the target event time for the last event observed in our full dataset.
+            target = None
         # Now if thetap is empty (i.e., observed_events has changed), re-evaluate the
         # variables that depend on observed_events
         if thetap is None:
             dataset = PointProcessDataset.load(
-                event_times=observed_events, p=ar_order, hasTheta0=hasTheta0,
+                event_times=observed_events,
+                p=ar_order,
+                hasTheta0=hasTheta0,
+                current_time=current_time,
+                target=target,
             )
             # The uncensored log-likelihood is a good starting point
             model = regr_likel(dataset, InterEventDistribution.INVERSE_GAUSSIAN)
@@ -148,22 +156,33 @@ def regr_likel_pipeline(
             # we can use the thetap and k computed in the previous iteration as starting point for the optimization
             # process.
             pass
+
+        # Let's optimize with right-censoring enabled
         dataset = PointProcessDataset.load(
             event_times=observed_events,
             p=ar_order,
             hasTheta0=hasTheta0,
             right_censoring=True,
             current_time=current_time,
+            target=target,
         )
-        model = regr_likel(
+
+        result = regr_likel(
             dataset=dataset,
             maximizer_distribution=InterEventDistribution.INVERSE_GAUSSIAN,
             theta0=thetap.reshape(-1, 1),
             k0=k,
         )
-        mu = np.dot(dataset.xt, model.theta.reshape(-1, 1))[0, 0]
-        all_thetas.append(deepcopy(model.theta))
-        all_ks.append(deepcopy(model.k))
-        all_times.append(current_time)
-        all_mus.append(mu)
-    return PipelineResult(all_thetas, all_ks, all_times, all_mus)
+
+        all_results.append(result)
+
+        print(
+            "\U0001F92F Currently evaluating time bin {:.3f} / {}  ({:.2f}%) \U0001F92F"
+            "".format(
+                current_time,
+                (bins + 1) * delta,
+                (bin_index - bins_in_window) / (bins + 1 - bins_in_window) * 100,
+            ),
+            end="\r",
+        )
+    return all_results

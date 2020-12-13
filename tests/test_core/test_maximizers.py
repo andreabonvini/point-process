@@ -5,7 +5,7 @@ import numpy as np
 from scipy.optimize.optimize import OptimizeResult
 
 from pp.core.maximizers import InverseGaussianMaximizer
-from pp.model import PointProcessDataset, PointProcessModel
+from pp.model import PointProcessDataset, PointProcessResult
 
 
 class TestMaximizers(TestCase):
@@ -29,6 +29,11 @@ class TestMaximizers(TestCase):
         self.params = np.vstack(
             [0.5, np.ones((self.n, 1)), np.ones((self.m, 1))]
         ).squeeze(1)
+        self.current_time = 6.0
+        self.xt = np.array(
+            [[1.000, 0.859, 0.891, 0.875, 0.859, 0.860, 0.953, 1.000, 0.992, 0.984]]
+        )
+        self.target = 0.900
 
     @patch("pp.core.maximizers.minimize")
     def test_inverse_gaussian_maximizer(self, minim):
@@ -38,7 +43,14 @@ class TestMaximizers(TestCase):
         mock_res.success = True
         minim.return_value = mock_res
         dataset = PointProcessDataset(
-            self.xn, self.wn, self.p, self.hasTheta0, self.eta
+            self.xn,
+            self.wn,
+            self.p,
+            self.hasTheta0,
+            self.eta,
+            self.current_time,
+            self.xt,
+            self.target,
         )
         res = InverseGaussianMaximizer(dataset).train()
-        self.assertIsInstance(res, PointProcessModel)
+        self.assertIsInstance(res, PointProcessResult)

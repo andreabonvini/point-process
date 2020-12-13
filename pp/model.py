@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from enum import Enum
-from typing import Callable, List, Optional, Union
+from typing import List, Optional, Union
 
 import numpy as np
 from scipy.linalg import toeplitz
@@ -13,66 +14,36 @@ class InterEventDistribution(Enum):
     INVERSE_GAUSSIAN = "Inverse Gaussian"
 
 
+@dataclass
 class PointProcessResult:
-    def __init__(self, mu, sigma):
-        self.mu = mu
-        self.sigma = sigma
-
-    def __repr__(self):
-        return f"mu: {self.mu}\nsigma: {self.sigma}"
-
-
-class PointProcessModel:
-    def __init__(
-        self,
-        model: Callable[[np.ndarray], PointProcessResult],
-        expected_shape: tuple,
-        theta: np.ndarray,
-        k: float,
-        results: List[float],
-        params_history: List[np.ndarray],
-        distribution: InterEventDistribution,
-        wn: np.ndarray,
-        ar_order: int,
-        hasTheta0: bool,
-    ):
-        """
+    """
         Args:
-            model: actual model which yields a PointProcessResult
-            expected_shape: expected input shape to feed the PointProcessModel with
+            hasTheta0: if the model was trained with theta0 parameter
             theta: final AR parameters.
             k: final shape parameter (aka lambda).
-            results: negative log-likelihood values obtained during the optimization process (should diminuish in time).
-            params_history: list of parameters obtained during the optimization process
-            distribution: fitting distribution used to train the model.
-            wn: target inter-events times used to train the model.
-            ar_order: AR order used to train the model
-            hasTheta0: if the model was trained with theta0 parameter
-        """
-        self._model = model
-        self.expected_input_shape = expected_shape
-        self.theta = theta
-        self.k = k
-        self.results = results
-        self.params_history = params_history
-        self.distribution = distribution
-        self.wn = wn
-        self.ar_order = ar_order
-        self.hasTheta0 = hasTheta0
+            current_time: current evaluatipon time
+            mu: final mu prediction for current_time.
+            sigma: final sigma prediction for current_time.
+            target: expected mu prediction for current_time
+            mean_interval: mean target interval, it is useful just to compute the spectal components
+            results:  (Optional)
+                negative log-likelihood values obtained during the optimization process (should diminuish in time).
+            params_history: (Optional)
+                matrix containing the values obtained for each parameter at each iteration of the optimization
+                process, every row represent a different parameter.
+                If the trained model distribution was an Inverse Gaussian the rows represent k,theta0,...,theatap
+    """
 
-    def __repr__(self):
-        return (
-            f"<PointProcessModel<\n"
-            f"\t<model={self._model}>\n"
-            f"\t<expected_input_shape={self.expected_input_shape}>\n"
-            f"\t<distributuon={self.distribution}>\n"
-            f"\t<ar_order={self.ar_order}>\n"
-            f"\t<hasTheta0={self.hasTheta0}>\n"
-            f">"
-        )
-
-    def __call__(self, inter_event_times: np.ndarray) -> PointProcessResult:
-        return self._model(inter_event_times)
+    hasTheta0: bool
+    theta: np.ndarray
+    k: float
+    current_time: float
+    mu: float
+    sigma: float
+    mean_interval: float
+    target: Optional[float] = None
+    results: Optional[List[float]] = None
+    params_history: Optional[List[np.ndarray]] = None
 
 
 class PointProcessDataset:
@@ -83,29 +54,34 @@ class PointProcessDataset:
         p: int,
         hasTheta0: bool,
         eta: np.array,
-        xt: Optional[np.array] = None,
+        current_time: float,
+        xt: np.array,
+        target: Optional[float] = None,
         wt: Optional[float] = None,
     ):
         """
 
         Args:
-            xn:
+            xn: lagged time intervals
             wn: target values for the given dataset
             p: AR order
             hasTheta0: whether or not the AR model has a theta0 constant to account for the average mu.
             eta: weights for each sample.
-            xt: is a vector 1xN of regressors, for the censoring part. (IF RIGHT-CENSORING)  # FIXME what's N
-            wt: is the current value of the future observation. (IF RIGHT-CENSORING) # FIXME which one is right?
-            wt: if right_censoring is applied, wt represents the distance (in seconds) between the last observed
-            event and the current evaluation time (evaluation time > last observed event) # FIXME which one is right?
+            xt: is a vector 1xp (or 1x(p+1) ) of regressors, for the censoring part.
+            wt: is the current value of the future observation. (IF RIGHT-CENSORING)
+                If right_censoring is applied, wt represents the distance (in seconds) between the last observed
+                 event and the current evaluation time (evaluation time > last observed event)
+            target: target time interval for the current time bin
         """
         self.xn = xn
         self.wn = wn
         self.p = p
         self.hasTheta0 = hasTheta0
         self.eta = eta
+        self.current_time = current_time
         self.xt = xt
         self.wt = wt
+        self.target = target
         if wt is not None:
             assert wt >= 0
 
@@ -126,6 +102,7 @@ class PointProcessDataset:
         weights_producer: ExponentialWeightsProducer = ExponentialWeightsProducer(),
         right_censoring: bool = False,
         current_time: Optional[float] = None,
+        target: Optional[float] = None,
     ):
         """
 
@@ -136,6 +113,7 @@ class PointProcessDataset:
             weights_producer: WeightsProducer object
             right_censoring: whether right-censoring is applied or not
             current_time: if right-censoring is applied, the current time at which we are evaluating our model
+            target: target time interval for the current time bin
         """
         inter_events_times = np.diff(event_times)
         # wn are the target inter-event intervals, i.e. the intervals we have to predict once we build our
@@ -149,23 +127,23 @@ class PointProcessDataset:
         # Note that the 1 at the beginning of each row is added only if the hasTheta0 parameter is set to True.
         a = inter_events_times[p - 1 : -1]
         b = inter_events_times[p - 1 :: -1]
-        if right_censoring:
-            xt = inter_events_times[-p:][::-1].reshape(1, -1)
-            xt = np.hstack([[[1.0]], xt]) if hasTheta0 else xt
-            # FIXME remove
-            wt = current_time - event_times[-1]
-        else:
-            xt = wt = None
         xn = toeplitz(a, b)
         xn = np.hstack([np.ones(wn.shape), xn]) if hasTheta0 else xn
+
+        xt = inter_events_times[-p:][::-1].reshape(1, -1)
+        xt = np.hstack([[[1.0]], xt]) if hasTheta0 else xt
+
+        wt = current_time - event_times[-1] if right_censoring else None
+
         uk = event_times[p + 1 :]
+
         if current_time is None:
             # In case current_time was not provided we suppose we are evaluating our model at t = last observed event
             current_time = event_times[-1]
 
         eta = weights_producer(current_time - uk)
 
-        return cls(xn, wn, p, hasTheta0, eta, xt, wt)
+        return cls(xn, wn, p, hasTheta0, eta, current_time, xt, target, wt)
 
 
 class PointProcessConstraint(ABC):  # pragma: no cover
@@ -182,5 +160,5 @@ class PointProcessConstraint(ABC):  # pragma: no cover
 
 class PointProcessMaximizer(ABC):  # pragma: no cover
     @abstractmethod
-    def train(self) -> PointProcessModel:
+    def train(self) -> PointProcessResult:
         pass

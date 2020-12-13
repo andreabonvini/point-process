@@ -1,15 +1,12 @@
 from abc import ABC
-from typing import List, Union
+from typing import List, Optional
 
 import numpy as np
+from scipy.misc import derivative
 from scipy.optimize import LinearConstraint
+from scipy.stats import norm
 
-from pp.model import (
-    InterEventDistribution,
-    PointProcessConstraint,
-    PointProcessModel,
-    PointProcessResult,
-)
+from pp.model import PointProcessConstraint
 
 
 class InverseGaussianConstraints(PointProcessConstraint, ABC):
@@ -27,16 +24,17 @@ class InverseGaussianConstraints(PointProcessConstraint, ABC):
         return self._compute_constraints()
 
     def _compute_constraints(self) -> List[LinearConstraint]:
-        maximum_event_interval = 2000
+
+        big_n = 1e6
         # Let's firstly define the positivity contraint for the parameter lambda
         n_samples, n_var = self._samples.shape
         # We also have to take into account the scale parameter
         n_var += 1
         A_lambda = np.identity(n_var)
-        lb_lambda = np.ones((n_var,)) * -np.inf
+        lb_lambda = np.ones((n_var,)) * (-big_n)
         # lambda (the scale parameter) is the only parameter that must be strictly positive
         lb_lambda[0] = 1e-7
-        ub_lambda = np.ones((n_var,)) * np.inf
+        ub_lambda = np.ones((n_var,)) * big_n
 
         # The theta parameters can take both positive and negative values, however the mean estimate from the AR model
         # should always be positive.
@@ -44,56 +42,20 @@ class InverseGaussianConstraints(PointProcessConstraint, ABC):
         # definition will not interfer with the choose of the lambda parameter (aka scale parameter).
         A_theta = np.hstack([np.zeros((n_samples, 1)), self._samples])
         lb_theta = np.zeros((n_samples,))
-        ub_theta = np.ones((n_samples,)) * maximum_event_interval
+        ub_theta = np.ones((n_samples,)) * big_n
         return [
             LinearConstraint(A_lambda, lb_lambda, ub_lambda),
             LinearConstraint(A_theta, lb_theta, ub_theta),
         ]
 
 
-def build_ig_model(
-    theta: np.ndarray,
-    k: float,
-    wn: np.array,
-    hasTheta0: bool,
-    results: List[float],
-    params_history: List[np.ndarray],
-) -> PointProcessModel:
-    expected_shape = (theta.shape[0] - 1,) if hasTheta0 else (theta.shape[0],)
-
-    def ig_model(inter_event_times: np.ndarray) -> PointProcessResult:
-        if inter_event_times.shape != expected_shape:
-            raise ValueError(
-                f"The inter-event times shape ({inter_event_times.shape})"
-                f" is incompatible with the inter-event times shape used for training ({expected_shape})"
-            )
-        # append 1 if hasTheta0
-        inter_event_times = (
-            np.concatenate(([1], inter_event_times)) if hasTheta0 else inter_event_times
-        )
-        # reshape from (n,) to (n,1)
-        inter_event_times = inter_event_times.reshape(-1, 1)
-        mu = np.dot(theta, inter_event_times)[0]
-        sigma = np.sqrt(mu ** 3 / k)
-        return PointProcessResult(mu, sigma)
-
-    return PointProcessModel(
-        model=ig_model,
-        expected_shape=expected_shape,
-        theta=theta,
-        k=k,
-        results=results,
-        params_history=params_history,
-        distribution=InterEventDistribution.INVERSE_GAUSSIAN,
-        wn=wn,
-        ar_order=expected_shape[0],
-        hasTheta0=hasTheta0,
+def _igcdf(t: float, mu: float, k: float):  # pragma: no cover
+    return norm.cdf(np.sqrt(k / t) * (t / mu - 1)) + np.exp(
+        (2 * k / mu) + norm.logcdf(-np.sqrt(k / t) * (t / mu + 1))
     )
 
 
-def inverse_gaussian(
-    xs: Union[np.array, float], mus: Union[np.array, float], lamb: float
-) -> Union[np.ndarray, float]:
+def _log_inverse_gaussian(xs: np.array, mus: np.array, lamb: float) -> np.ndarray:
     """
     Args:
         xs: points or point in which evaluate the probabilty
@@ -111,22 +73,22 @@ def inverse_gaussian(
                 "xs and mus should have the same shape if they're both np.array"
             )
 
-    elif isinstance(xs, np.ndarray) or isinstance(mus, np.ndarray):
+    elif not isinstance(xs, np.ndarray) or not isinstance(mus, np.ndarray):
         raise TypeError(
             f"xs: {type(xs)}\n"
             f"mus: {type(mus)}\n"
-            f"xs and mus should be either both np.array or both float"
+            f"xs and mus should be both np.array"
         )
     arg = lamb / (2 * np.pi * xs ** 3)
     ps = np.sqrt(arg) * np.exp((-lamb * (xs - mus) ** 2) / (2 * mus ** 2 * xs))
-    return ps
+    return np.log(ps)
 
 
 def likel_invgauss_consistency_check(
     xn: np.array,
     wn: np.array,
-    xt: Union[np.array, None],
-    thetap0: Union[np.array, None],
+    xt: Optional[np.array] = None,
+    thetap0: Optional[np.array] = None,
 ):
     m, n = xn.shape
     if wn.shape != (m, 1):
@@ -146,7 +108,7 @@ def likel_invgauss_consistency_check(
         )
 
 
-def _compute_mus(thetap: np.array, xn: np.ndarray):
+def _compute_mus(thetap: np.array, xn: np.ndarray) -> np.array:
     return np.dot(xn, thetap)
 
 
@@ -160,11 +122,13 @@ def _compute_theta_grad(xn, eta, k, wn, mus) -> np.ndarray:
 
 
 def compute_invgauss_negloglikel(
-    params: np.array, xn: np.array, wn: np.array, eta: np.array
+    params: np.array,
+    xn: np.array,
+    wn: np.array,
+    eta: np.array,
+    xt: Optional[np.array] = None,
+    wt: Optional[float] = None,
 ) -> float:
-    """
-    ALERT: Remember that the parameters that we want to optimize are just k, and thetap
-    """
     n, m = xn.shape
     k_param, theta_params = params[0], params[1:]
     # if k_param < 0:
@@ -177,32 +141,57 @@ def compute_invgauss_negloglikel(
     #                               f"xn:{xn}\n"
     #                               f"theta:{params[1:]}\n"
     #                               f"predictions:{mus}"))
-    ps = inverse_gaussian(wn, mus, k_param)
-    # 1. is just to avoid log(0) in case the ps are really small
-    logps = np.log(1.0 + ps)
-    return -np.dot(eta.T, logps)[0, 0]
+    logps = _log_inverse_gaussian(wn, mus, k_param)
+    # If right censoring is applied...
+    if wt is not None and xt is not None:  # pragma: no cover
+        rc_mu = np.dot(xt, theta_params)[0]
+        rc_eta = eta[0][-1]
+        # FIXME is 1e-14 safe?
+        return -np.dot(eta.T, logps)[0, 0] - rc_eta * np.log(
+            1 - _igcdf(wt, rc_mu, k_param) + 1e-14
+        )
+    else:
+        return -np.dot(eta.T, logps)[0, 0]
 
 
 def compute_invgauss_negloglikel_grad(
-    params: np.array, xn: np.array, wn: np.array, eta: np.array
+    params: np.array,
+    xn: np.array,
+    wn: np.array,
+    eta: np.array,
+    xt: Optional[np.array] = None,
+    wt: Optional[float] = None,
 ) -> np.ndarray:
     """
     returns the vector of the first-derivatives of the negloglikelihood w.r.t to each parameter
     """
 
-    n, m = xn.shape
     # Retrieve the useful variables
     k, theta = params[0], params[1:].reshape((len(params) - 1, 1))
     mus = _compute_mus(theta, xn)
     k_grad = _compute_k_grad(eta, k, wn, mus)
     theta_grad = _compute_theta_grad(xn, eta, k, wn, mus)
-
+    # If right censoring is applied...
+    if wt is not None and xt is not None:  # pragma: no cover
+        rc_eta = eta[0][-1]
+        rc_mu = np.dot(xt, theta)[0, 0]
+        rc_dk = np.nan_to_num(_right_censoring_derivative_k(k, wt, rc_mu, rc_eta))
+        rc_dtheta = (
+            np.nan_to_num(_right_censoring_derivative_mu(k, wt, rc_mu, rc_eta)) * xt.T
+        )
+        k_grad += rc_dk
+        theta_grad += rc_dtheta
     # Return all the gradients as a single vector of shape (p+1+1,) or (p+1,) if theta0 is not accounted.
     return np.vstack([[[k_grad]], theta_grad]).squeeze(1)
 
 
 def compute_invgauss_negloglikel_hessian(
-    params: np.array, xn: np.array, wn: np.array, eta: np.array
+    params: np.array,
+    xn: np.array,
+    wn: np.array,
+    eta: np.array,
+    xt: Optional[np.array] = None,
+    wt: Optional[float] = None,
 ) -> np.ndarray:
     """
     returns the vector of the second-derivatives of the negloglikelihood w.r.t to each
@@ -218,9 +207,87 @@ def compute_invgauss_negloglikel_hessian(
     ktheta = np.dot(tmp.T, xn)
     tmp = k * eta * ((3 * wn - 2 * mus) / mus ** 4)
     thetatheta = np.dot(xn.T, xn * tmp)
+
+    # If right censoring is applied...
+    if wt is not None and xt is not None:  # pragma: no cover
+        rc_mu = np.dot(xt, theta)[0, 0]
+        rc_eta = eta[0][-1]
+        rc_dkk = np.nan_to_num(_right_censoring_derivative_kk(wt, rc_mu, k, rc_eta))
+        rc_dthetatheta = np.nan_to_num(
+            _right_censoring_derivative_mumu(wt, rc_mu, k, rc_eta)
+        ) * np.dot(xt.T, xt)
+        rc_dktheta = (
+            np.nan_to_num(_right_censoring_derivative_kmu(wt, rc_mu, k, rc_eta)) * xt
+        )
+        # print(f"rc_dkk: {rc_dkk}\nrc_dthetatheta: {rc_dthetatheta}\nrc_dktheta: {rc_dktheta}\n\n")
+        thetatheta += rc_dthetatheta
+        kk += rc_dkk
+        ktheta += rc_dktheta
+
     m, _ = thetatheta.shape
     k_theta_hess = np.zeros((m + 1, m + 1))
     k_theta_hess[1:, 1:] = thetatheta
     k_theta_hess[0, 0] = kk
     k_theta_hess[0, 1:] = k_theta_hess[1:, 0] = ktheta.squeeze()
+
     return k_theta_hess
+
+
+def _right_censoring_derivative_k(t, mu, k, etan):  # pragma: no cover
+    # FIXME is 1e-13 safe?
+    mul1 = etan / (1e-13 + 1 - _igcdf(t, mu, k))
+    add1 = norm.pdf(np.sqrt(k / t) * (t / mu - 1)) * (
+        1 / (2 * t * np.sqrt(k / t)) * (t / mu - 1)
+    )
+    add2 = 2 / mu * np.exp(2 * k / mu + norm.logcdf(-np.sqrt(k / t) * (t / mu + 1)))
+    add3 = np.exp(2 * k / mu + norm.logpdf(-np.sqrt(k / t) * (t / mu + 1))) * (
+        -1 / (2 * t * np.sqrt(k / t)) * (t / mu + 1)
+    )
+    return mul1 * (add1 + add2 + add3)
+
+
+def _right_censoring_derivative_theta(t, mu, k, etan, xt):  # pragma: no cover
+    # FIXME is 1e-13 safe?
+    mul1 = etan / (1e-13 + 1 - _igcdf(t, mu, k))
+    add1 = norm.pdf(np.sqrt(k / t) * (t / mu - 1)) * (-np.sqrt(k / t) * t / mu ** 2)
+    add2 = (-2 * k / mu ** 2) * np.exp(
+        2 * k / mu + norm.logcdf(-np.sqrt(k / t) * (t / mu + 1))
+    )
+    add3 = np.exp(2 * k / mu + norm.logpdf(-np.sqrt(k / t) * (t / mu + 1))) * (
+        np.sqrt(k / t) * t / mu ** 2
+    )
+    return mul1 * (add1 + add2 + add3) * xt.T
+
+
+def _right_censoring_derivative_mu(t, mu, k, etan):  # pragma: no cover
+    # FIXME is 1e-13 safe?
+    mul1 = etan / (1e-13 + 1 - _igcdf(t, mu, k))
+    add1 = norm.pdf(np.sqrt(k / t) * (t / mu - 1)) * (-np.sqrt(k / t) * t / mu ** 2)
+    add2 = (-2 * k / mu ** 2) * np.exp(
+        2 * k / mu + norm.logcdf(-np.sqrt(k / t) * (t / mu + 1))
+    )
+    add3 = np.exp(2 * k / mu + norm.logpdf(-np.sqrt(k / t) * (t / mu + 1))) * (
+        np.sqrt(k / t) * t / mu ** 2
+    )
+    return mul1 * (add1 + add2 + add3)
+
+
+def _right_censoring_derivative_kk(wt, rc_mu, k, rc_eta):  # pragma: no cover
+    def _dk(x: float):
+        return _right_censoring_derivative_k(wt, rc_mu, x, etan=rc_eta)
+
+    return derivative(func=_dk, x0=k, dx=0.5)  # TODO that dx=0.5 may be way too high
+
+
+def _right_censoring_derivative_mumu(wt, rc_mu, k, rc_eta):  # pragma: no cover
+    def _dmu(x: float):
+        return _right_censoring_derivative_mu(wt, x, k, etan=rc_eta)
+
+    return derivative(func=_dmu, x0=rc_mu, dx=1e-3)
+
+
+def _right_censoring_derivative_kmu(wt, rc_mu, k, rc_eta):  # pragma: no cover
+    def _dkwrtmu(x: float):
+        return _right_censoring_derivative_k(wt, x, k, rc_eta)
+
+    return derivative(func=_dkwrtmu, x0=rc_mu, dx=1e-4)

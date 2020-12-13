@@ -3,42 +3,17 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 
-from pp.model import (
-    InterEventDistribution,
-    PointProcessDataset,
-    PointProcessMaximizer,
-    PointProcessModel,
-    PointProcessResult,
-)
+from pp.core.maximizers import InverseGaussianMaximizer
+from pp.model import InterEventDistribution, PointProcessDataset, PointProcessResult
 from pp.regression import _pipeline_setup, regr_likel, regr_likel_pipeline
 
-
-def fake_model(events: np.ndarray) -> PointProcessResult:
-    return PointProcessResult(1.0, 1.0)
-
-
-mock_model = PointProcessModel(
-    model=fake_model,
-    expected_shape=(3,),
-    theta=np.array([1, 2, 3, 4]),
-    k=1000,
-    results=[1.0, 0.6, 0.1],
-    params_history=[
-        np.array([1, 2, 3, 4]),
-        np.array([1, 2, 3, 4]),
-        np.array([1, 2, 3, 4]),
-    ],
-    distribution=InterEventDistribution.INVERSE_GAUSSIAN,
-    wn=np.array([1, 2, 3, 4, 5, 6]),
-    ar_order=3,
-    hasTheta0=True,
+mock_maximizer = Mock(spec=InverseGaussianMaximizer)
+mock_maximizer.train.return_value = PointProcessResult(
+    True, np.array([[1.0], [2.0], [3.0]]), 500.0, 5.0, 1.0, 1.0, 1.0, 0.8
 )
 
-mock_maximizer = Mock(spec=PointProcessMaximizer)
-mock_maximizer.train.return_value = mock_model
 
-
-def fake_constructor(dataset, theta0, k0):
+def fake_constructor(dataset, theta0, k0, verbose, save_history):
     return mock_maximizer
 
 
@@ -55,7 +30,7 @@ class TestRegression(TestCase):
             dataset=PointProcessDataset.load(events, 3, True),
             maximizer_distribution=InterEventDistribution.INVERSE_GAUSSIAN,
         )
-        self.assertEqual(res, mock_model)
+        self.assertIsInstance(res, PointProcessResult)
 
     def test_pipeline_setup_1(self):
         events = np.array([0.0 + 0.9 * i for i in range(20)])
@@ -120,16 +95,4 @@ class TestRegression(TestCase):
         pip_result = regr_likel_pipeline(
             event_times=events, ar_order=3, hasTheta0=True, window_length=3.0, delta=0.5
         )
-        expected = np.array([3.0, 3.5, 4.0, 4.5, 5.0])
-        res = np.array(pip_result.times)
-        np.testing.assert_array_equal(res, expected)
-
-    def test_regr_likel_pipeline_big(self):
-        pass
-        # self.data = SpectralData()
-        # res = regr_likel_pipeline(
-        #    event_times=self.data.rr,
-        #    ar_order=3,
-        #    hasTheta0=True,
-        #    window_length=10.,
-        #    delta=0.5)
+        self.assertIsInstance(pip_result[0], PointProcessResult)
