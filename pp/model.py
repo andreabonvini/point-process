@@ -24,8 +24,9 @@ class PointProcessResult:
             current_time: current evaluatipon time
             mu: final mu prediction for current_time.
             sigma: final sigma prediction for current_time.
-            target: expected mu prediction for current_time
             mean_interval: mean target interval, it is useful just to compute the spectal components
+            lambda_: Inhomogenous Poisson rate (or hazard function) at current_time
+            target: (Optional) expected mu prediction for current_time
             results:  (Optional)
                 negative log-likelihood values obtained during the optimization process (should diminuish in time).
             params_history: (Optional)
@@ -41,6 +42,7 @@ class PointProcessResult:
     mu: float
     sigma: float
     mean_interval: float
+    lambda_: float
     target: Optional[float] = None
     results: Optional[List[float]] = None
     params_history: Optional[List[np.ndarray]] = None

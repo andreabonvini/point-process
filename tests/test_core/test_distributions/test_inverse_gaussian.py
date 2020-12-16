@@ -7,6 +7,7 @@ from pp.core.distributions.inverse_gaussian import (
     compute_invgauss_negloglikel,
     compute_invgauss_negloglikel_grad,
     compute_invgauss_negloglikel_hessian,
+    compute_lambda,
     likel_invgauss_consistency_check,
 )
 from tests.data import DatasetTestData
@@ -75,3 +76,7 @@ class TestInverseGaussian(TestCase):
         mus = 1.0
         with self.assertRaises(TypeError):
             _log_inverse_gaussian(xs, mus, lamb=500.0)
+
+    def test_compute_lambda(self):
+        res = compute_lambda(mu=1.0, k=1700.0, time=0.85)
+        self.assertGreater(res, 0.0)

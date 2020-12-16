@@ -49,9 +49,16 @@ class InverseGaussianConstraints(PointProcessConstraint, ABC):
         ]
 
 
-def _igcdf(t: float, mu: float, k: float):  # pragma: no cover
+def igcdf(t: float, mu: float, k: float):  # pragma: no cover
     return norm.cdf(np.sqrt(k / t) * (t / mu - 1)) + np.exp(
         (2 * k / mu) + norm.logcdf(-np.sqrt(k / t) * (t / mu + 1))
+    )
+
+
+def igpdf(t: float, mu: float, k: float):  # pragma: no cover
+    arg = k / (2 * np.pi * t ** 3)
+    return np.nan_to_num(
+        np.sqrt(arg) * np.exp((-k * (t - mu) ** 2) / (2 * mu ** 2 * t))
     )
 
 
@@ -121,13 +128,12 @@ def _compute_theta_grad(xn, eta, k, wn, mus) -> np.ndarray:
     return np.dot(xn.T, tmp)
 
 
-def compute_invgauss_negloglikel(
-    params: np.array,
-    xn: np.array,
-    wn: np.array,
-    eta: np.array,
-    xt: Optional[np.array] = None,
-    wt: Optional[float] = None,
+def compute_lambda(mu: float, k: float, time: float):
+    return igpdf(time, mu, k) / (1 - igcdf(time, mu, k))
+
+
+def _compute_invgauss_negloglikel_norc(
+    params: np.array, xn: np.array, wn: np.array, eta: np.array,
 ) -> float:
     n, m = xn.shape
     k_param, theta_params = params[0], params[1:]
@@ -142,16 +148,28 @@ def compute_invgauss_negloglikel(
     #                               f"theta:{params[1:]}\n"
     #                               f"predictions:{mus}"))
     logps = _log_inverse_gaussian(wn, mus, k_param)
+    return -np.dot(eta.T, logps)[0, 0]
+
+
+def compute_invgauss_negloglikel(
+    params: np.array,
+    xn: np.array,
+    wn: np.array,
+    eta: np.array,
+    xt: Optional[np.array] = None,
+    wt: Optional[float] = None,
+) -> float:
+    k_param, theta_params = params[0], params[1:]
     # If right censoring is applied...
     if wt is not None and xt is not None:  # pragma: no cover
         rc_mu = np.dot(xt, theta_params)[0]
         rc_eta = eta[0][-1]
         # FIXME is 1e-14 safe?
-        return -np.dot(eta.T, logps)[0, 0] - rc_eta * np.log(
-            1 - _igcdf(wt, rc_mu, k_param) + 1e-14
-        )
+        return _compute_invgauss_negloglikel_norc(
+            params, xn, wn, eta
+        ) - rc_eta * np.log(1 - igcdf(wt, rc_mu, k_param) + 1e-14)
     else:
-        return -np.dot(eta.T, logps)[0, 0]
+        return _compute_invgauss_negloglikel_norc(params, xn, wn, eta)
 
 
 def compute_invgauss_negloglikel_grad(
@@ -185,6 +203,20 @@ def compute_invgauss_negloglikel_grad(
     return np.vstack([[[k_grad]], theta_grad]).squeeze(1)
 
 
+def _compute_invgauss_negloglikel_hessian_values_norc(
+    k: float, theta: np.array, xn: np.array, wn: np.array, eta: np.array
+):
+    n, _ = xn.shape
+    # Retrieve the useful variables
+    mus = np.dot(xn, theta).reshape((n, 1))
+    kk = np.sum(eta / 2) * 1 / (k ** 2)
+    tmp = -eta * (wn - mus) / mus ** 3
+    ktheta = np.dot(tmp.T, xn)
+    tmp = k * eta * ((3 * wn - 2 * mus) / mus ** 4)
+    thetatheta = np.dot(xn.T, xn * tmp)
+    return kk, ktheta, thetatheta
+
+
 def compute_invgauss_negloglikel_hessian(
     params: np.array,
     xn: np.array,
@@ -197,17 +229,11 @@ def compute_invgauss_negloglikel_hessian(
     returns the vector of the second-derivatives of the negloglikelihood w.r.t to each
     parameter
     """
-    n, m = xn.shape
-    # Retrieve the useful variables
+    _, m = xn.shape
     k, theta = params[0], params[1:].reshape((m, 1))
-    mus = np.dot(xn, theta).reshape((n, 1))
-    kk = np.sum(eta / 2) * 1 / (k ** 2)
-    tmp = -eta * (wn - mus) / mus ** 3
-
-    ktheta = np.dot(tmp.T, xn)
-    tmp = k * eta * ((3 * wn - 2 * mus) / mus ** 4)
-    thetatheta = np.dot(xn.T, xn * tmp)
-
+    kk, ktheta, thetatheta = _compute_invgauss_negloglikel_hessian_values_norc(
+        k, theta, xn, wn, eta
+    )
     # If right censoring is applied...
     if wt is not None and xt is not None:  # pragma: no cover
         rc_mu = np.dot(xt, theta)[0, 0]
@@ -219,7 +245,6 @@ def compute_invgauss_negloglikel_hessian(
         rc_dktheta = (
             np.nan_to_num(_right_censoring_derivative_kmu(wt, rc_mu, k, rc_eta)) * xt
         )
-        # print(f"rc_dkk: {rc_dkk}\nrc_dthetatheta: {rc_dthetatheta}\nrc_dktheta: {rc_dktheta}\n\n")
         thetatheta += rc_dthetatheta
         kk += rc_dkk
         ktheta += rc_dktheta
@@ -235,7 +260,7 @@ def compute_invgauss_negloglikel_hessian(
 
 def _right_censoring_derivative_k(t, mu, k, etan):  # pragma: no cover
     # FIXME is 1e-13 safe?
-    mul1 = etan / (1e-13 + 1 - _igcdf(t, mu, k))
+    mul1 = etan / (1e-13 + 1 - igcdf(t, mu, k))
     add1 = norm.pdf(np.sqrt(k / t) * (t / mu - 1)) * (
         1 / (2 * t * np.sqrt(k / t)) * (t / mu - 1)
     )
@@ -248,7 +273,7 @@ def _right_censoring_derivative_k(t, mu, k, etan):  # pragma: no cover
 
 def _right_censoring_derivative_theta(t, mu, k, etan, xt):  # pragma: no cover
     # FIXME is 1e-13 safe?
-    mul1 = etan / (1e-13 + 1 - _igcdf(t, mu, k))
+    mul1 = etan / (1e-13 + 1 - igcdf(t, mu, k))
     add1 = norm.pdf(np.sqrt(k / t) * (t / mu - 1)) * (-np.sqrt(k / t) * t / mu ** 2)
     add2 = (-2 * k / mu ** 2) * np.exp(
         2 * k / mu + norm.logcdf(-np.sqrt(k / t) * (t / mu + 1))
@@ -261,7 +286,7 @@ def _right_censoring_derivative_theta(t, mu, k, etan, xt):  # pragma: no cover
 
 def _right_censoring_derivative_mu(t, mu, k, etan):  # pragma: no cover
     # FIXME is 1e-13 safe?
-    mul1 = etan / (1e-13 + 1 - _igcdf(t, mu, k))
+    mul1 = etan / (1e-13 + 1 - igcdf(t, mu, k))
     add1 = norm.pdf(np.sqrt(k / t) * (t / mu - 1)) * (-np.sqrt(k / t) * t / mu ** 2)
     add2 = (-2 * k / mu ** 2) * np.exp(
         2 * k / mu + norm.logcdf(-np.sqrt(k / t) * (t / mu + 1))
