@@ -9,6 +9,7 @@ from pp.core.distributions.inverse_gaussian import (
     compute_invgauss_negloglikel,
     compute_invgauss_negloglikel_grad,
     compute_invgauss_negloglikel_hessian,
+    compute_lambda,
     likel_invgauss_consistency_check,
 )
 from pp.model import PointProcessDataset, PointProcessMaximizer, PointProcessResult
@@ -18,10 +19,10 @@ class InverseGaussianMaximizer(PointProcessMaximizer, ABC):
     def __init__(
         self,
         dataset: PointProcessDataset,
-        max_steps: int = 500,
+        max_steps: int = 200,
         theta0: Optional[np.array] = None,
         k0: Optional[float] = None,
-        verbose: bool = False,
+        verbose: bool = True,
         save_history: bool = False,
     ):
         """
@@ -31,7 +32,7 @@ class InverseGaussianMaximizer(PointProcessMaximizer, ABC):
                 theta0: is a vector of shape (p,1) (or (p+1,1) if teh dataset was created with the hasTheta0 option)
                  of coefficients used as starting point for the optimization process.
                 k0: is the starting point for the scale parameter (sometimes called lambda).
-                verbose: If True convergenee information will be displayed
+                verbose: If True convergence information will be displayed
                 save_history: If True the PointProcessResult returned by the train() routine will contain additional / useful
                               information about the training process. (Check the definition of PointProcessResult for details)
             Returns:
@@ -84,9 +85,7 @@ class InverseGaussianMaximizer(PointProcessMaximizer, ABC):
         cons = InverseGaussianConstraints(self.dataset.xn)()
         # it's ok to have cons as a list of LinearConstrainsts if we're using the "trust-constr" method,
         # don't trust scipy.optimize.minimize documentation.
-
-        # remove tol parameter to see right-censoring peaks BUT-> time-complexity X10
-        # decrease tol to 0.025 to faster results.
+        # decrease tol to observe the "right-censoring ridges"
         optimization_result = minimize(
             fun=compute_invgauss_negloglikel,
             x0=params0,
@@ -106,6 +105,11 @@ class InverseGaussianMaximizer(PointProcessMaximizer, ABC):
             callback=_save_history if self.save_history else None,
         )
 
+        if not optimization_result.success:  # pragma: no cover
+            print(
+                f"\nWarning: Convergence not reached at time bin {self.dataset.current_time}\n"
+            )
+
         if self.verbose:  # pragma: no cover
             print(
                 f"\rNumber of iterations: {optimization_result.nit}\n"
@@ -122,6 +126,13 @@ class InverseGaussianMaximizer(PointProcessMaximizer, ABC):
         # Compute sigma
         sigma = mu ** 3 / k_param
 
+        # Compute Lambda (Hazard Function)
+        # for the current_time
+        if self.dataset.wt is not None:  # pragma: no cover
+            lambda_ = compute_lambda(mu, k_param, self.dataset.wt)
+        else:
+            lambda_ = None
+
         return PointProcessResult(
             self.dataset.hasTheta0,
             thetap_params,
@@ -130,6 +141,7 @@ class InverseGaussianMaximizer(PointProcessMaximizer, ABC):
             mu,
             sigma,
             np.mean(self.dataset.wn),
+            lambda_,
             self.dataset.target,
             results if results else None,
             np.hstack([params.reshape(-1, 1) for params in params_history])

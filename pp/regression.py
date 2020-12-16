@@ -1,8 +1,10 @@
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import numpy as np
 
+from pp.core.distributions.inverse_gaussian import compute_lambda, igcdf
 from pp.core.maximizers import InverseGaussianMaximizer
 from pp.model import InterEventDistribution, PointProcessDataset, PointProcessResult
 
@@ -65,13 +67,19 @@ def _pipeline_setup(
     return last_event_index, bins, bins_in_window
 
 
+@dataclass
+class PipelineResult:
+    regression_results: List[PointProcessResult]
+    taus: List[float]
+
+
 def regr_likel_pipeline(
     event_times: np.array,
     ar_order: int = 9,
     hasTheta0: bool = True,
     window_length: float = 60.0,
     delta: float = 0.005,
-) -> List[PointProcessResult]:
+) -> PipelineResult:
     """
     Args:
         event_times: event times expressed in seconds.
@@ -101,11 +109,20 @@ def regr_likel_pipeline(
     # of the events used for local regression at each time bin, discarding old events and adding new ones.
     # It works as a buffer for our regression process.
     observed_events = events[: last_event_index + 1]  # +1 since we want to include it!
+    n_optimization_events = len(event_times) - len(observed_events)
+    passed_events = 0
     # Initialize model parameters to None
     thetap = None
     k = None
     # Initialize result lists
-    all_results = []
+    all_results: List[PointProcessResult] = []
+    # _lambdas is just a temporary list containing the instantaneous hazard rate value, this list will be reset
+    # each time we encounter a new event. This values are needed for the computation of the taus. (see below)
+    _lambdas: List[float] = []
+    # taus will contain the values needed to assess goodness of fit, refer to the following paper for more details:
+    # "The time-rescaling theorem and its application to neural spike train data analysis"
+    # (Emery N Brown, Riccardo Barbieri, Valérie Ventura, Robert E Kass, Loren M Frank)
+    taus = []
     for bin_index in range(
         bins_in_window, bins + 1
     ):  # bins + 1 since we want to include the last one!
@@ -126,11 +143,17 @@ def regr_likel_pipeline(
         # We check whether an event happened in ((bin_index - 1) * time_resolution, bin_index * time_resolution]
         event_happened: bool = events[last_event_index + 1] <= current_time
         if event_happened:
+            passed_events += 1
             last_event_index += 1
             # Append current event
             observed_events = np.append(observed_events, events[last_event_index])
             # Force re-evaluation of starting point for thetap
             thetap = None
+            # Compute the tau value for the last observed event by approximating the integral:
+            tau = np.sum(_lambdas) * delta
+            taus.append(tau)
+            # reset _lambdas
+            _lambdas = []
 
         # Let's save the target event for the current time bin
         if last_event_index < len(events) - 1:
@@ -149,40 +172,55 @@ def regr_likel_pipeline(
                 target=target,
             )
             # The uncensored log-likelihood is a good starting point
-            model = regr_likel(dataset, InterEventDistribution.INVERSE_GAUSSIAN)
-            thetap, k = model.theta, model.k
+            result = regr_likel(dataset, InterEventDistribution.INVERSE_GAUSSIAN)
+            thetap, k = result.theta, result.k
         else:
             # If we end up in this branch, then the only thing that change is the right-censoring part,
             # we can use the thetap and k computed in the previous iteration as starting point for the optimization
             # process.
             pass
 
-        # Let's optimize with right-censoring enabled
-        dataset = PointProcessDataset.load(
-            event_times=observed_events,
-            p=ar_order,
-            hasTheta0=hasTheta0,
-            right_censoring=True,
-            current_time=current_time,
-            target=target,
-        )
+        wt = current_time - observed_events[-1]
+        # 1e-2 is completely arbitrary, why did I put this? optimize time!
+        if igcdf(wt, result.mu, result.k) < 1e-22:  # pragma: no cover
 
-        result = regr_likel(
-            dataset=dataset,
-            maximizer_distribution=InterEventDistribution.INVERSE_GAUSSIAN,
-            theta0=thetap.reshape(-1, 1),
-            k0=k,
-        )
+            # Copy the prior result
+            result = deepcopy(result)
+            # The only things that change are current time and lambda
+            result.current_time = current_time
+
+            result.lambda_ = compute_lambda(result.mu, result.k, wt)
+        else:  # pragma: no cover
+            # Let's optimize with right-censoring enabled
+            dataset = PointProcessDataset.load(
+                event_times=observed_events,
+                p=ar_order,
+                hasTheta0=hasTheta0,
+                right_censoring=True,
+                current_time=current_time,
+                target=target,
+            )
+            result = regr_likel(
+                dataset=dataset,
+                maximizer_distribution=InterEventDistribution.INVERSE_GAUSSIAN,
+                theta0=thetap.reshape(-1, 1),
+                k0=k,
+            )
 
         all_results.append(result)
+
+        # FIXME since we are calculating the taus inside the main loop of the Regression Pipeline,
+        #  We could avoid saving the lambda_ value inside the PointProcessResult and just compute it here
+        _lambdas.append(result.lambda_)
 
         print(
             "\U0001F92F Currently evaluating time bin {:.3f} / {}  ({:.2f}%) \U0001F92F"
             "".format(
                 current_time,
                 (bins + 1) * delta,
-                (bin_index - bins_in_window) / (bins + 1 - bins_in_window) * 100,
+                passed_events / n_optimization_events * 100,
             ),
             end="\r",
         )
-    return all_results
+
+    return PipelineResult(all_results, taus)

@@ -9,7 +9,7 @@ from pp.regression import _pipeline_setup, regr_likel, regr_likel_pipeline
 
 mock_maximizer = Mock(spec=InverseGaussianMaximizer)
 mock_maximizer.train.return_value = PointProcessResult(
-    True, np.array([[1.0], [2.0], [3.0]]), 500.0, 5.0, 1.0, 1.0, 1.0, 0.8
+    True, np.array([[1.0], [2.0], [3.0]]), 500.0, 5.0, 1.0, 1.0, 1.0, 1.0, 0.8
 )
 
 
@@ -95,4 +95,4 @@ class TestRegression(TestCase):
         pip_result = regr_likel_pipeline(
             event_times=events, ar_order=3, hasTheta0=True, window_length=3.0, delta=0.5
         )
-        self.assertIsInstance(pip_result[0], PointProcessResult)
+        self.assertIsInstance(pip_result.regression_results[0], PointProcessResult)
