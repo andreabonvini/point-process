@@ -19,11 +19,10 @@ class TestModel(TestCase):
         xn = np.array([[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]])
         wn = np.array([[1.0], [1.0], [1.0]])
         p = 2
-        hasTheta = True
         eta = np.array([[1.0, 1.0, 1.0]])
         current_time = 5.0
         xt = np.array([[1.0, 1.0, 1.0]])
         target = 1.0
         wt = -0.5
         with self.assertRaises(AssertionError):
-            PointProcessDataset(xn, wn, p, hasTheta, eta, current_time, xt, target, wt)
+            PointProcessDataset(xn, wn, p, eta, current_time, xt, target, wt)

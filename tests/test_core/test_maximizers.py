@@ -1,11 +1,9 @@
 from unittest import TestCase
-from unittest.mock import Mock, patch
 
 import numpy as np
-from scipy.optimize.optimize import OptimizeResult
 
 from pp.core.maximizers import InverseGaussianMaximizer
-from pp.model import PointProcessDataset, PointProcessResult
+from pp.model import InverseGaussianResult, PointProcessDataset
 
 
 class TestMaximizers(TestCase):
@@ -35,22 +33,9 @@ class TestMaximizers(TestCase):
         )
         self.target = 0.900
 
-    @patch("pp.core.maximizers.minimize")
-    def test_inverse_gaussian_maximizer(self, minim):
-        mock_res = Mock(OptimizeResult)
-        mock_res.x = np.ones((self.m + self.n + 1,))
-        mock_res.nit = 100
-        mock_res.success = True
-        minim.return_value = mock_res
+    def test_inverse_gaussian_maximizer(self):
         dataset = PointProcessDataset(
-            self.xn,
-            self.wn,
-            self.p,
-            self.hasTheta0,
-            self.eta,
-            self.current_time,
-            self.xt,
-            self.target,
+            self.xn, self.wn, self.p, self.eta, self.current_time, self.xt, self.target,
         )
-        res = InverseGaussianMaximizer(dataset).train()
-        self.assertIsInstance(res, PointProcessResult)
+        res = InverseGaussianMaximizer(dataset, max_steps=30).train()
+        self.assertIsInstance(res, InverseGaussianResult)

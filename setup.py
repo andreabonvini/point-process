@@ -12,8 +12,8 @@ with open("Pipfile.lock") as fd:
     ]
 
 setup(
-    name="point-process",
-    version="0.2",
+    name="pointprocess",
+    version="0.3",
     packages=find_packages(exclude=["*.tests", "*.tests.*", "tests.*", "tests"]),
     install_requires=install_requires,
     author="Andrea Bonvini",
