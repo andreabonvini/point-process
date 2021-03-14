@@ -4,7 +4,7 @@ from typing import List
 
 import numpy as np
 
-from pp.model import PointProcessResult
+from pp.model import InverseGaussianResult
 
 
 @dataclass()
@@ -22,8 +22,8 @@ class Pole:
 
 @dataclass
 class SpectralAnalysis:
-    frequencies: np.array  # Hz
-    powers: np.array  # ms^2 / Hz
+    frequencies: np.ndarray  # Hz
+    powers: np.ndarray  # ms^2 / Hz
     poles: List[Pole]
     comps: List[List[complex]]
 
@@ -54,7 +54,7 @@ def hrv_indices(analysis: SpectralAnalysis) -> HeartRateVariabilityIndices:
 
 
 class SpectralAnalyzer:
-    def __init__(self, result: PointProcessResult, aggregate: bool = True):
+    def __init__(self, result: InverseGaussianResult, aggregate: bool = True):
         """
         Args:
             result: output of PointProcessMaximizer.train(), we'll use the AR parameters learnt by this model in order to conduct
@@ -76,7 +76,9 @@ class SpectralAnalyzer:
     def _compute_psd(
         self, theta: np.ndarray, mean_interval: float, k: float
     ) -> SpectralAnalysis:  # pragma: no cover
-        thetap = deepcopy(theta[1:]) if self.result.hasTheta0 else deepcopy(theta[:])
+        thetap = deepcopy(
+            theta[1:]
+        )  # We are not interested in theta0 for the spectral analysis.
         var = mean_interval ** 3 / k
         var = 1e6 * var  # from [s^2] to [ms^2]
         fsamp = 1 / mean_interval

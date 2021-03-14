@@ -1,52 +1,71 @@
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import numpy as np
+from sklearn.linear_model import LinearRegression
+from tqdm import tqdm
 
-from pp.core.distributions.inverse_gaussian import compute_lambda, igcdf
+from pp.core.distributions.inverse_gaussian import igcdf, igpdf
 from pp.core.maximizers import InverseGaussianMaximizer
-from pp.model import InterEventDistribution, PointProcessDataset, PointProcessResult
+from pp.model import InterEventDistribution, InverseGaussianResult, PointProcessDataset
 
 maximizers_dict = {
     InterEventDistribution.INVERSE_GAUSSIAN.value: InverseGaussianMaximizer
 }
 
 
+def compute_lambda_approximation(
+    mu: float, k: float
+) -> Callable[[float], float]:  # pragma: no cover
+    wts = np.linspace(0.25, 1.6, 1000)
+    old = -1
+    y = []
+    x = []
+    for i in range(len(wts)):
+        current_lambda = igpdf(wts[i], mu, k) / (1 - igcdf(wts[i], mu, k))
+        if current_lambda >= old:
+            if current_lambda > 10:
+                y.append(current_lambda)
+                x.append(wts[i])
+            old = current_lambda
+        else:
+            break
+    X = np.array(x).reshape((-1, 1))
+    model = LinearRegression().fit(X, y)
+
+    def lambda_approximation(t: float) -> float:
+        return model.intercept_ + model.coef_[0] * t
+
+    return lambda_approximation
+
+
 def regr_likel(
     dataset: PointProcessDataset,
     maximizer_distribution: InterEventDistribution,
-    theta0: Optional[np.array] = None,
+    theta0: Optional[np.ndarray] = None,
     k0: Optional[float] = None,
-    verbose: bool = False,
-    save_history: bool = False,
-) -> PointProcessResult:
+    max_steps: int = 50,
+) -> InverseGaussianResult:
     """
     Args:
-        dataset: PointProcessDataset containing the specified AR order (p)
-        and hasTheta0 option (if we want to account for the bias)
+        dataset: PointProcessDataset object
         maximizer_distribution: log-likelihood maximization function belonging to the Maximizer enum.
         theta0: starting vector for the theta parameters
         k0: starting value for the k parameter
-        verbose: If True convergence information will be displayed
-        save_history: If True the PointProcessResult returned by the train() routine will contain additional / useful
-                      information about the training process. (Check the definition of PointProcessResult for details)
+        max_steps: Maximum number of iterations during the optimization procedure
 
     Returns:
         PointProcessResult
     """
 
     return maximizers_dict[maximizer_distribution.value](
-        dataset=dataset,
-        theta0=deepcopy(theta0),
-        k0=deepcopy(k0),
-        verbose=verbose,
-        save_history=save_history,
+        dataset=dataset, max_steps=max_steps, theta0=theta0, k0=k0,
     ).train()
 
 
 def _pipeline_setup(
-    event_times: np.array, window_length: float, delta: float
+    event_times: np.ndarray, window_length: float, delta: float
 ) -> Tuple[int, int, int]:
     # Firstly some consistency check
     if event_times[-1] < window_length:
@@ -69,22 +88,20 @@ def _pipeline_setup(
 
 @dataclass
 class PipelineResult:
-    regression_results: List[PointProcessResult]
+    regression_results: List[InverseGaussianResult]
     taus: List[float]
 
 
 def regr_likel_pipeline(
-    event_times: np.array,
+    event_times: np.ndarray,
     ar_order: int = 9,
-    hasTheta0: bool = True,
     window_length: float = 60.0,
     delta: float = 0.005,
-) -> PipelineResult:
+) -> PipelineResult:  # pragma: no cover
     """
     Args:
         event_times: event times expressed in seconds.
         ar_order: AR order to use in the regression process
-        hasTheta0: whether or not the AR model has a theta0 constant to account for the average mu.
         window_length: time window used for local likelihood maximization.
         delta: how much the local likelihood time interval is shifted to compute the next parameter update,
         be careful: time_resolution must be little enough s.t. at most ONE event can happen in each time bin.
@@ -109,22 +126,26 @@ def regr_likel_pipeline(
     # of the events used for local regression at each time bin, discarding old events and adding new ones.
     # It works as a buffer for our regression process.
     observed_events = events[: last_event_index + 1]  # +1 since we want to include it!
-    n_optimization_events = len(event_times) - len(observed_events)
-    passed_events = 0
     # Initialize model parameters to None
     thetap = None
     k = None
     # Initialize result lists
-    all_results: List[PointProcessResult] = []
-    # _lambdas is just a temporary list containing the instantaneous hazard rate value, this list will be reset
+    all_results: List[InverseGaussianResult] = []
+    # lambdas is just a temporary list containing the instantaneous hazard rate value, this list will be reset
     # each time we encounter a new event. This values are needed for the computation of the taus. (see below)
-    _lambdas: List[float] = []
+    lambdas: List[float] = []
     # taus will contain the values needed to assess goodness of fit, refer to the following paper for more details:
     # "The time-rescaling theorem and its application to neural spike train data analysis"
     # (Emery N Brown, Riccardo Barbieri, Valérie Ventura, Robert E Kass, Loren M Frank)
     taus = []
-    for bin_index in range(
-        bins_in_window, bins + 1
+    # When we'll have to compute the Hazard Function for t > mu it may happen that we encounter some numerical problem,
+    #  in this case we'll use an approximation (specifically we'll estimate an approximation by means of a
+    #  simple linear regression)
+    lambda_approximation: Callable[[float], float]
+    lambda_stable = True
+    old_lambda = -1
+    for bin_index in tqdm(
+        range(bins_in_window, bins + 1)
     ):  # bins + 1 since we want to include the last one!
         # current_time is the time (expressed in seconds) associated with the given bin.
         current_time = bin_index * delta
@@ -143,17 +164,18 @@ def regr_likel_pipeline(
         # We check whether an event happened in ((bin_index - 1) * time_resolution, bin_index * time_resolution]
         event_happened: bool = events[last_event_index + 1] <= current_time
         if event_happened:
-            passed_events += 1
             last_event_index += 1
             # Append current event
             observed_events = np.append(observed_events, events[last_event_index])
             # Force re-evaluation of starting point for thetap
             thetap = None
             # Compute the tau value for the last observed event by approximating the integral:
-            tau = np.sum(_lambdas) * delta
+            tau = sum(lambdas) * delta
             taus.append(tau)
             # reset _lambdas
-            _lambdas = []
+            lambdas = []
+            old_lambda = -1
+            lambda_stable = True
 
         # Let's save the target event for the current time bin
         if last_event_index < len(events) - 1:
@@ -167,12 +189,13 @@ def regr_likel_pipeline(
             dataset = PointProcessDataset.load(
                 event_times=observed_events,
                 p=ar_order,
-                hasTheta0=hasTheta0,
                 current_time=current_time,
                 target=target,
             )
             # The uncensored log-likelihood is a good starting point
-            result = regr_likel(dataset, InterEventDistribution.INVERSE_GAUSSIAN)
+            result = regr_likel(
+                dataset, InterEventDistribution.INVERSE_GAUSSIAN, max_steps=50
+            )
             thetap, k = result.theta, result.k
         else:
             # If we end up in this branch, then the only thing that change is the right-censoring part,
@@ -180,47 +203,43 @@ def regr_likel_pipeline(
             # process.
             pass
 
+        dataset = PointProcessDataset.load(
+            event_times=observed_events,
+            p=ar_order,
+            current_time=current_time,
+            target=target,
+        )
         wt = current_time - observed_events[-1]
-        # 1e-2 is completely arbitrary, why did I put this? optimize time!
-        if igcdf(wt, result.mu, result.k) < 1e-22:  # pragma: no cover
+        mu = np.dot(dataset.xt, thetap.reshape(-1, 1))[0, 0]
+        cdf = igcdf(wt, mu, k)
+        pdf = igpdf(wt, mu, k)
+        # current_lambda: Inhomogenous Poisson rate (or hazard function) at current_time
+        if lambda_stable:
+            current_lambda = pdf / (1 - cdf)
+        else:
+            current_lambda = lambda_approximation(wt)  # noqa
+            assert current_lambda > 0.0
+        if old_lambda > current_lambda > 0.1 and lambda_stable:
+            lambda_stable = False
+            lambda_approximation = compute_lambda_approximation(mu, k)
+            current_lambda = lambda_approximation(wt)
+            assert current_lambda > 0.0
+        old_lambda = current_lambda
+        lambdas.append(current_lambda)
 
-            # Copy the prior result
-            result = deepcopy(result)
-            # The only things that change are current time and lambda
-            result.current_time = current_time
-
-            result.lambda_ = compute_lambda(result.mu, result.k, wt)
-        else:  # pragma: no cover
-            # Let's optimize with right-censoring enabled
-            dataset = PointProcessDataset.load(
-                event_times=observed_events,
-                p=ar_order,
-                hasTheta0=hasTheta0,
-                right_censoring=True,
-                current_time=current_time,
-                target=target,
-            )
+        if cdf > 0.0:
+            # Right-censoring is induced only when the cdf is > 0.0
             result = regr_likel(
                 dataset=dataset,
                 maximizer_distribution=InterEventDistribution.INVERSE_GAUSSIAN,
                 theta0=thetap.reshape(-1, 1),
                 k0=k,
+                max_steps=10,
             )
+        else:
+            result = deepcopy(result)
+            result.current_time = current_time
 
         all_results.append(result)
-
-        # FIXME since we are calculating the taus inside the main loop of the Regression Pipeline,
-        #  We could avoid saving the lambda_ value inside the PointProcessResult and just compute it here
-        _lambdas.append(result.lambda_)
-
-        print(
-            "\U0001F92F Currently evaluating time bin {:.3f} / {}  ({:.2f}%) \U0001F92F"
-            "".format(
-                current_time,
-                (bins + 1) * delta,
-                passed_events / n_optimization_events * 100,
-            ),
-            end="\r",
-        )
 
     return PipelineResult(all_results, taus)

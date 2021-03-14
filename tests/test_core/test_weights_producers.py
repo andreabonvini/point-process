@@ -10,7 +10,7 @@ class TestWeightsProducers(TestCase):
         self.target_distances = np.array([2.0, 1.5, 1.0, 0.5, 0.0])
 
     def test_exponential_weighs(self):
-        expected = np.array([[0.81], [0.85], [0.90], [0.94], [1.0]])
+        expected = np.array([[0.81], [0.85381497], [0.9], [0.9486833], [1.0]])
         res = ExponentialWeightsProducer(alpha=0.9)(
             target_distances=self.target_distances
         )

@@ -17,6 +17,9 @@ numpy = "*"
 scipy = "*"
 matplotlib = "*"
 pandas = "*"
+nlopt = "*"
+tqdm = "*"
+scikit-learn = "*"
 
 [requires]
 python_version = "3.7.7"

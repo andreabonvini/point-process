@@ -1,36 +1,19 @@
 from unittest import TestCase
-from unittest.mock import Mock, patch
 
 import numpy as np
 
-from pp.core.maximizers import InverseGaussianMaximizer
-from pp.model import InterEventDistribution, PointProcessDataset, PointProcessResult
-from pp.regression import _pipeline_setup, regr_likel, regr_likel_pipeline
-
-mock_maximizer = Mock(spec=InverseGaussianMaximizer)
-mock_maximizer.train.return_value = PointProcessResult(
-    True, np.array([[1.0], [2.0], [3.0]]), 500.0, 5.0, 1.0, 1.0, 1.0, 1.0, 0.8
-)
-
-
-def fake_constructor(dataset, theta0, k0, verbose, save_history):
-    return mock_maximizer
-
-
-mocked_maximizers_dict = {
-    InterEventDistribution.INVERSE_GAUSSIAN.value: fake_constructor
-}
+from pp.model import InterEventDistribution, InverseGaussianResult, PointProcessDataset
+from pp.regression import _pipeline_setup, regr_likel
 
 
 class TestRegression(TestCase):
-    @patch.dict("pp.regression.maximizers_dict", mocked_maximizers_dict)
     def test_regr_likel(self):
         events = np.linspace(1, 30, 15)
         res = regr_likel(
-            dataset=PointProcessDataset.load(events, 3, True),
+            dataset=PointProcessDataset.load(events, 3),
             maximizer_distribution=InterEventDistribution.INVERSE_GAUSSIAN,
         )
-        self.assertIsInstance(res, PointProcessResult)
+        self.assertIsInstance(res, InverseGaussianResult)
 
     def test_pipeline_setup_1(self):
         events = np.array([0.0 + 0.9 * i for i in range(20)])
@@ -88,11 +71,3 @@ class TestRegression(TestCase):
         delta = 0.5
         with self.assertRaises(Exception):
             _pipeline_setup(events, window_length, delta)
-
-    @patch.dict("pp.regression.maximizers_dict", mocked_maximizers_dict)
-    def test_regr_likel_pipeline(self):
-        events = np.array([0.0, 0.6, 1.1, 1.6, 2.1, 2.6, 3.1, 3.6, 4.1, 4.6])
-        pip_result = regr_likel_pipeline(
-            event_times=events, ar_order=3, hasTheta0=True, window_length=3.0, delta=0.5
-        )
-        self.assertIsInstance(pip_result.regression_results[0], PointProcessResult)
