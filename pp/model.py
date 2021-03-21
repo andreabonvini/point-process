@@ -94,10 +94,10 @@ class PointProcessDataset:
             event_times: np.ndarray of event times expressed in s.
             p: AR order
             weights_producer: WeightsProducer object
-            right_censoring: whether right-censoring is applied or not
             current_time: if right-censoring is applied, the current time at which we are evaluating our model
             target: target time interval for the current time bin
         """
+
         inter_events_times = np.diff(event_times)
         # wn are the target inter-event intervals, i.e. the intervals we have to predict once we build our
         # RR autoregressive model.

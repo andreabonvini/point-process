@@ -91,6 +91,8 @@ class SpectralAnalyzer:
         # Fix AR models that might have become slightly unstable due to the estimation process
         # using an exponential decay (see Stoica and Moses, Signal Processing 26(1) 1992)
         mod_scale = min(0.99 / max(np.abs(poles_values)), 1)
+        print(mod_scale)
+        print(poles_values)
         poles_values = mod_scale * poles_values
         thetap = thetap * np.cumprod(np.ones(thetap.shape) * mod_scale)
 

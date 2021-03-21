@@ -1,5 +1,6 @@
 import ctypes
 import os
+import pathlib
 
 import numpy as np
 
@@ -18,15 +19,15 @@ def regr_likel(
 ) -> np.ndarray:
     # Convert np.array to ctype doubles
     theta0 = theta0.astype(np.double)
-    theta0_p = theta0.ctypes.data_as(c_double_p)
+    theta0_p = theta0.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
     xn = xn.astype(np.double)
-    xn_p = xn.ctypes.data_as(c_double_p)
+    xn_p = xn.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
     eta = eta.astype(np.double)
-    eta_p = eta.ctypes.data_as(c_double_p)
+    eta_p = eta.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
     wn = wn.astype(np.double)
-    wn_p = wn.ctypes.data_as(c_double_p)
+    wn_p = wn.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
     xt = xt.astype(np.double)
-    xt_p = xt.ctypes.data_as(c_double_p)
+    xt_p = xt.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
 
     regr_likel_cdll.regr_likel.restype = np.ctypeslib.ndpointer(
         dtype=ctypes.c_double, shape=(AR_ORDER + 2,)
@@ -37,26 +38,30 @@ def regr_likel(
     )
 
 
-c_double_p = ctypes.POINTER(ctypes.c_double)
 # so_file generated with:
-# cc -framework Accelerate -lnlopt -fPIC -shared -o regr_likel.so c_regr_likel.c
-# "-framework Accelerate -lnlopt" -> Linking Accelerate.h and nlopt
-so_file = "/Users/z051m4/PycharmProjects/pointprocess/pp/optimized/regr_likel.so"
+# cc -lnlopt -fPIC -shared -o regr_likel.so c_regr_likel.c
+
+abs_path = pathlib.Path(__file__).parent.absolute()
+
+so_file = os.path.join(abs_path, "regr_likel.so")
+c_file = os.path.join(abs_path, "c_regr_likel.c")
+
 if not os.path.isfile(so_file):  # pragma: no cover
-    raise Exception(
-        "You have to generate a .so file first.\nCheck the README.md file associated with this repository."
-    )
-else:
-    regr_likel_cdll = ctypes.CDLL(so_file)
-    regr_likel_cdll.regr_likel.argtypes = [
-        ctypes.c_int,
-        ctypes.c_int,
-        ctypes.c_int,
-        c_double_p,
-        ctypes.c_double,
-        c_double_p,
-        c_double_p,
-        c_double_p,
-        c_double_p,
-        ctypes.c_double,
-    ]
+    print(f"It appears that {so_file} is not present\nCompiling {c_file}...")
+    # On Mac
+    os.system(f"cc -lnlopt -fPIC -shared -o {so_file} {c_file}")
+    print("Compilation completed! \U0001F389\U0001F389")
+
+regr_likel_cdll = ctypes.CDLL(so_file)
+regr_likel_cdll.regr_likel.argtypes = [
+    ctypes.c_int,
+    ctypes.c_int,
+    ctypes.c_int,
+    ctypes.POINTER(ctypes.c_double),
+    ctypes.c_double,
+    ctypes.POINTER(ctypes.c_double),
+    ctypes.POINTER(ctypes.c_double),
+    ctypes.POINTER(ctypes.c_double),
+    ctypes.POINTER(ctypes.c_double),
+    ctypes.c_double,
+]

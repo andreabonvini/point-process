@@ -1,6 +1,6 @@
+import os
 from copy import deepcopy
-from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
 from sklearn.linear_model import LinearRegression
@@ -18,19 +18,20 @@ maximizers_dict = {
 def compute_lambda_approximation(
     mu: float, k: float
 ) -> Callable[[float], float]:  # pragma: no cover
-    wts = np.linspace(0.25, 1.6, 1000)
-    old = -1
-    y = []
-    x = []
+    def _compute_lambda(_wt, _mu, _k):
+        return igpdf(_wt, _mu, _k) / (1 - igcdf(_wt, _mu, _k))
+
+    start = mu
+    end = mu * 2
+    wts = np.linspace(start, end, 100)
     for i in range(len(wts)):
-        current_lambda = igpdf(wts[i], mu, k) / (1 - igcdf(wts[i], mu, k))
-        if current_lambda >= old:
-            if current_lambda > 10:
-                y.append(current_lambda)
-                x.append(wts[i])
-            old = current_lambda
-        else:
+        wt = wts[i]
+        max_i = i
+        if igcdf(wt, mu, k) == 1.0:
+            max_i = max_i - 1
             break
+    x = wts[:max_i]
+    y = [_compute_lambda(wt, mu, k) for wt in x]
     X = np.array(x).reshape((-1, 1))
     model = LinearRegression().fit(X, y)
 
@@ -86,25 +87,26 @@ def _pipeline_setup(
     return last_event_index, bins, bins_in_window
 
 
-@dataclass
-class PipelineResult:
-    regression_results: List[InverseGaussianResult]
-    taus: List[float]
-
-
+# flake8: noqa: C901
 def regr_likel_pipeline(
     event_times: np.ndarray,
     ar_order: int = 9,
     window_length: float = 60.0,
     delta: float = 0.005,
-) -> PipelineResult:  # pragma: no cover
+    csv_path: Optional[str] = None,
+) -> Union[None, List[InverseGaussianResult]]:  # pragma: no cover
     """
     Args:
         event_times: event times expressed in seconds.
         ar_order: AR order to use in the regression process
         window_length: time window used for local likelihood maximization.
         delta: how much the local likelihood time interval is shifted to compute the next parameter update,
-        be careful: time_resolution must be little enough s.t. at most ONE event can happen in each time bin.
+            be careful: time_resolution must be little enough s.t. at most ONE event can happen in each time bin.
+            Moreover the smaller it is the better since we use it to approximate the integral of the lambda function.
+        csv_path: If a csv path is provided, a csv contraining the regression paramenters for each time bin will be
+            saved. Check the documentation to learn about the format of such csv.
+            Important: if csv_path = True the results will exclusively be saved in the .csv file, otherwise a list of
+                InverseGaussianResults will be returned.
 
     Returns:
         a PipelineResult object.
@@ -114,10 +116,30 @@ def regr_likel_pipeline(
         and Emery N. Brown in the paper:
         "A point-process model of human heartbeat intervals: new definitions of heart rate and heart rate variability"
     """
+    if csv_path:
+        # If a csv with the same name alreasy exists we remove it.
+        if os.path.isfile(csv_path):
+            os.system(f"rm {csv_path}")
+        f = open(csv_path, "a")
+        header = [
+            "TIME_STEP",
+            "MEAN_WN",
+            "K",
+            "MU",
+            "SIGMA",
+            "LAMBDA",
+            "EVENT_HAPPENED",
+        ]
+        header += [f"THETA_{n}" for n in range(ar_order + 1)]
+        f.write(",".join(header))
+        f.write("\n")
+        # precision represents the amount of decimal numbers we want to include in our .csv
+        precision: int = 7
     # We want the first event to be at time 0
     events = event_times - event_times[0]
     # last_event_index is the index of the last event within the first window
     # e.g. if events = [0.0, 1.3, 2.1, 3.2, 3.9, 4.5] and window_length = 3.5 then last_event_index = 3
+    # (events[3] = 3.2)
     # bins is the total number of bins we can discretize our events with (given our time_resolution)
     last_event_index, bins, bins_in_window = _pipeline_setup(
         events, window_length, delta
@@ -129,23 +151,17 @@ def regr_likel_pipeline(
     # Initialize model parameters to None
     thetap = None
     k = None
-    # Initialize result lists
-    all_results: List[InverseGaussianResult] = []
-    # lambdas is just a temporary list containing the instantaneous hazard rate value, this list will be reset
-    # each time we encounter a new event. This values are needed for the computation of the taus. (see below)
-    lambdas: List[float] = []
-    # taus will contain the values needed to assess goodness of fit, refer to the following paper for more details:
-    # "The time-rescaling theorem and its application to neural spike train data analysis"
-    # (Emery N Brown, Riccardo Barbieri, Valérie Ventura, Robert E Kass, Loren M Frank)
-    taus = []
+    if not csv_path:
+        # Initialize result lists in case
+        all_results: List[InverseGaussianResult] = []
     # When we'll have to compute the Hazard Function for t > mu it may happen that we encounter some numerical problem,
     #  in this case we'll use an approximation (specifically we'll estimate an approximation by means of a
     #  simple linear regression)
     lambda_approximation: Callable[[float], float]
-    lambda_stable = True
-    old_lambda = -1
     for bin_index in tqdm(
-        range(bins_in_window, bins + 1)
+        range(bins_in_window, bins + 1),
+        ascii=True,
+        desc="\N{brain}\U0001FAC0Processing\U0001FAC0\N{brain}",
     ):  # bins + 1 since we want to include the last one!
         # current_time is the time (expressed in seconds) associated with the given bin.
         current_time = bin_index * delta
@@ -169,13 +185,6 @@ def regr_likel_pipeline(
             observed_events = np.append(observed_events, events[last_event_index])
             # Force re-evaluation of starting point for thetap
             thetap = None
-            # Compute the tau value for the last observed event by approximating the integral:
-            tau = sum(lambdas) * delta
-            taus.append(tau)
-            # reset _lambdas
-            lambdas = []
-            old_lambda = -1
-            lambda_stable = True
 
         # Let's save the target event for the current time bin
         if last_event_index < len(events) - 1:
@@ -183,63 +192,75 @@ def regr_likel_pipeline(
         else:
             # We can't know the target event time for the last event observed in our full dataset.
             target = None
-        # Now if thetap is empty (i.e., observed_events has changed), re-evaluate the
-        # variables that depend on observed_events
-        if thetap is None:
-            dataset = PointProcessDataset.load(
-                event_times=observed_events,
-                p=ar_order,
-                current_time=current_time,
-                target=target,
-            )
-            # The uncensored log-likelihood is a good starting point
-            result = regr_likel(
-                dataset, InterEventDistribution.INVERSE_GAUSSIAN, max_steps=50
-            )
-            thetap, k = result.theta, result.k
-        else:
-            # If we end up in this branch, then the only thing that change is the right-censoring part,
-            # we can use the thetap and k computed in the previous iteration as starting point for the optimization
-            # process.
-            pass
 
+        # We create a PointProcessDataset for the current time bin
         dataset = PointProcessDataset.load(
             event_times=observed_events,
             p=ar_order,
             current_time=current_time,
             target=target,
         )
-        wt = current_time - observed_events[-1]
-        mu = np.dot(dataset.xt, thetap.reshape(-1, 1))[0, 0]
-        cdf = igcdf(wt, mu, k)
-        pdf = igpdf(wt, mu, k)
-        # current_lambda: Inhomogenous Poisson rate (or hazard function) at current_time
-        if lambda_stable:
-            current_lambda = pdf / (1 - cdf)
-        else:
-            current_lambda = lambda_approximation(wt)  # noqa
-            assert current_lambda > 0.0
-        if old_lambda > current_lambda > 0.1 and lambda_stable:
-            lambda_stable = False
-            lambda_approximation = compute_lambda_approximation(mu, k)
-            current_lambda = lambda_approximation(wt)
-            assert current_lambda > 0.0
-        old_lambda = current_lambda
-        lambdas.append(current_lambda)
+        # Now if thetap is empty (i.e., observed_events has changed), re-evaluate the
+        # variables that depend on observed_events
+        if thetap is None:
 
-        if cdf > 0.0:
-            # Right-censoring is induced only when the cdf is > 0.0
             result = regr_likel(
-                dataset=dataset,
-                maximizer_distribution=InterEventDistribution.INVERSE_GAUSSIAN,
-                theta0=thetap.reshape(-1, 1),
-                k0=k,
-                max_steps=10,
+                dataset, InterEventDistribution.INVERSE_GAUSSIAN, max_steps=100
             )
         else:
-            result = deepcopy(result)
-            result.current_time = current_time
+            # If we end up in this branch, then the only thing that change is the right-censoring part,
+            # we can use the thetap and k computed in the previous iteration as starting point for the optimization
+            # process.
+            if cdf > 0.0:  # noqa
+                # We can say that right-censoring is induced only when the cdf is > 0.0
+                result = regr_likel(
+                    dataset=dataset,
+                    maximizer_distribution=InterEventDistribution.INVERSE_GAUSSIAN,
+                    theta0=thetap.reshape(-1, 1),
+                    k0=k,
+                    max_steps=15,
+                )
+            else:
+                if not csv_path:
+                    result = deepcopy(result)
+                    result.current_time = current_time
+        if not csv_path:
+            all_results.append(result)
+        thetap, k = result.theta, result.k
+        wt = current_time - observed_events[-1]
+        mu = np.dot(dataset.xt, thetap.reshape(-1, 1))[0, 0]
+        assert mu > 0.0
+        sigma = mu ** 3 / k
+        cdf = igcdf(wt, mu, k)
+        pdf = igpdf(wt, mu, k)
+        # current_lambda: Inhomogeneous Poisson rate (or hazard function) at current_time
+        if cdf == 1.0:
+            lambda_approximation = compute_lambda_approximation(mu, k)
+            current_lambda = lambda_approximation(wt)
+        else:
+            current_lambda = pdf / (1 - cdf)
+        assert current_lambda >= 0.0
 
-        all_results.append(result)
+        if csv_path:
+            row = [
+                str(round(current_time, precision)),
+                str(round(result.mean_interval, precision)),
+                str(round(k, precision)),
+                str(round(mu, precision)),
+                str(round(sigma, precision)),
+                str(round(current_lambda, precision)),
+                "1" if event_happened else "0",
+            ]
+            row += [str(round(theta, precision)) for theta in thetap]
+            f.write(",".join(row))
+            f.write("\n")
 
-    return PipelineResult(all_results, taus)
+    s = "Regression pipeline completed! \U0001F389\U0001F389"
+    if csv_path:
+        s += f" csv file saved at: '{csv_path}' \U0001F44C"
+    print(s)
+    if csv_path:
+        f.close()
+        return None
+    else:
+        return all_results
