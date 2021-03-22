@@ -1,11 +1,11 @@
 #include <stdio.h>
-#include <Accelerate/Accelerate.h>
 #include <math.h>
 #include <nlopt.h>
+#include <stdlib.h>
 
 
 void elementwise_product(double * a, double * b, int dim, double * res){
-    // This function returns in res the elementwiseproduct between a and b,
+    // This function returns in res the element wise product between a and b,
     // a and b must have the same dimension dim.
     for(int i = 0; i < dim; i++){
         res[i] = a[i]*b[i];
@@ -21,22 +21,33 @@ void elementwise_ratio(double * a, double * b, int dim, double * res){
     }
 }
 
-
 double vectorvector_product(double * a, double * b, int dim){
-    // This function returns in res the elementwiseproduct between a and b,
+    // This function returns in res the dot product between a and b,
     // a and b must have the same dimension dim.
-    return cblas_ddot(dim,a,1,b,1);
+    double res = 0;
+    for (int i = 0; i < dim; i++){
+        res = res + a[i]*b[i];
+    }
+    return res;
 }
 
 
 void matrixvector_product(int n_rows, int n_cols, double mat[n_rows][n_cols], double v[n_cols], double res[n_rows], int transpose){
-    // This function returns in res matrix-vector dot-product between mat and v,
-    // we must have that n_cols represents both the number of columns of mat and the number of elements of v.
     if (!transpose){
-        cblas_dgemv(CblasRowMajor, CblasNoTrans, n_rows, n_cols, 1.f, &mat[0][0], n_cols, v, 1, 0.f, res, 1);
+        for (int row=0; row < n_rows; row++){
+            res[row] = 0;
+            for(int col=0; col < n_cols; col++){
+                res[row] = res[row] + mat[row][col] * v[col];
+            }
+        }
     }
     else{
-        cblas_dgemv(CblasRowMajor, CblasTrans, n_rows, n_cols, 1.f, &mat[0][0], n_cols, v, 1, 0.f, res, 1);
+        for (int col=0; col < n_cols; col++){
+            res[col] = 0;
+            for(int row=0; row < n_rows; row++){
+                res[col] = res[col] + mat[row][col] * v[row];
+            }
+        }
     }
 }
 
@@ -146,6 +157,13 @@ struct my_func_data
     int N_SAMPLES;
 } my_func_data;
 
+struct my_constraint_data
+{
+    int n_elements; // n_elements = AR_ORDER + 1
+    double * v; // [n_elements];
+} my_constraint_data;
+
+
 
 long double compute_igcdf(long double t, long double mu, long double k){
     long double sqrt_kwt = (long double) sqrt(k/t);
@@ -194,7 +212,6 @@ double nlopt_invgauss_negloglikel(unsigned int n, const double x[n], double grad
     double negloglikel;
     long double rc_mu;
     long double rc_eta;
-    double wt_thr = 0.2;
     double abs_thr = 0.5;
     long double igcdf = 0.0;
 
@@ -243,7 +260,6 @@ double nlopt_invgauss_negloglikel(unsigned int n, const double x[n], double grad
         // In order to avoid numerical problems we compute the right-censoring part only if the current time bin is
         // between (rc_mu - abs_thr) and (rc_mu + abs_thr) where abs_thr = 0.5
         if (fabs(data->wt - (double) rc_mu) < abs_thr){
-//        printf("VOLEEEEVI\n");
 
             long double sqrt_kwt;
             long double wtrcmu_minus_one;
@@ -262,9 +278,7 @@ double nlopt_invgauss_negloglikel(unsigned int n, const double x[n], double grad
             exp_argument = (long double)(2.0 * k / rc_mu) + norm_logcdf(minus_sqrt_kwt_wtrcmu_plus_one);
             exp_result = (long double) exp(exp_argument);
             igcdf = norm_cdf(sqrt_kwt_wtrcmu_minus_one) + exp_result;
-//            printf("\ncurrent_time: %f\n",data->wt);
 
-//            printf("igcdf: %Lf\n\n",igcdf);
             // Compute the right censoring derivative for k...
             mul1 = ((long double) (rc_eta)) / (1.0-igcdf); // mul1 = rc_eta / (1 - igcdf)
             // add1 = norm.pdf(np.sqrt(k / wt) * (wt / rc_mu - 1)) * (1 / (2 * wt * np.sqrt(k / wt)) * (wt / rc_mu - 1))
@@ -325,6 +339,17 @@ double nlopt_invgauss_negloglikel(unsigned int n, const double x[n], double grad
 }
 
 
+//double constraint(unsigned n, const double *x, double *grad, void *data)
+//{
+//    my_constraint_data *d = (my_constraint_data *) data;
+//    double a = d->a, b = d->b;
+//    if (grad) {
+//        grad[0] = 3 * a * (a*x[0] + b) * (a*x[0] + b);
+//        grad[1] = -1.0;
+//    }
+//    return ((a*x[0] + b) * (a*x[0] + b) * (a*x[0] + b) - x[1]);
+// }
+
 double * regr_likel(
             int AR_ORDER,
             int N_SAMPLES,
@@ -356,6 +381,20 @@ double * regr_likel(
     nlopt_opt opt = nlopt_create(NLOPT_LD_TNEWTON, AR_ORDER+2);
     nlopt_set_min_objective(opt, nlopt_invgauss_negloglikel, &my_func_data);
     nlopt_set_maxeval(opt, max_steps);
+//    for (int i = 0; i < N_SAMPLES;i++){
+//        my_constraint_data data;
+//        data.n_elements = AR_ORDER + 1;
+//        data.v = xn[i]; // or &xn[i]
+//        nlopt_add_inequality_constraint(opt, constraint, data, 0.0);
+//    }
+
+    double lb[AR_ORDER+2];;
+    lb[0] = 0.0;
+    lb[1] = 0.0;
+    for (int i = 2; i < AR_ORDER+2;i++){
+        lb[i] = -1000.0;
+        }
+    nlopt_set_lower_bounds(opt, lb);
     double minf;
     nlopt_optimize(opt, x, &minf);
     for(int i = 0; i < AR_ORDER + 2; i++){

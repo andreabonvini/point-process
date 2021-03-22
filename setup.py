@@ -4,6 +4,7 @@ from setuptools import find_packages, setup
 
 tests_require = []
 
+
 with open("Pipfile.lock") as fd:
     lock_data = json.load(fd)
     install_requires = [
@@ -14,7 +15,9 @@ with open("Pipfile.lock") as fd:
 setup(
     name="pointprocess",
     version="0.3",
-    packages=find_packages(exclude=["*.tests", "*.tests.*", "tests.*", "tests"]),
+    packages=find_packages(
+        exclude=["*.tests", "*.tests.*", "tests.*", "tests", "docs", "bin"]
+    ),
     install_requires=install_requires,
     author="Andrea Bonvini",
     author_email="a.bonvini96@gmail.com",

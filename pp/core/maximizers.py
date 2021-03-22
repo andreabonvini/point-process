@@ -52,6 +52,7 @@ class InverseGaussianMaximizer:
         # TODO change initialization (maybe?)
         if self.theta0 is None:
             self.theta0 = np.ones((self.m, 1)) / self.m
+            self.theta0[0] = float(np.mean(self.dataset.wn))
         if self.k0 is None:
             self.k0 = 1700.0
 
