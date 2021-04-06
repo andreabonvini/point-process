@@ -4,6 +4,7 @@ source =
 omit =
     # spectral is not tested yet, do it!
     pp/spectral.py
+    pp/plot.py
 
 
 [report]

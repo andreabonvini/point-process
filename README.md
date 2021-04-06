@@ -11,16 +11,12 @@ This repository contains a `Python` implementation of the `MATLAB` software prov
 
 Before proceeding with the installation step, make sure you have [nlopt](https://nlopt.readthedocs.io/en/latest/) installed on your machine.
 
+(Note: support for Windows will be available soon)
+
 ### On MacOs
 
 ```
 brew install nlopt
-```
-
-### On Windows
-
-```
-# refer to the official documentation
 ```
 
 ### On Linux
@@ -34,22 +30,22 @@ brew install nlopt
 ### Install with pip
 
 ```
-pip install point-process
+pip install pointprocess
 ```
 
 ### Install from source
 
 ```
 # clone repo
-git clone https://github.com/andreabonvini/point-process.git
-cd point-process
+git clone https://github.com/andreabonvini/pointprocess.git
+cd pointprocess
 # Install dependencies
 pipenv install
 ```
 
 # Documentation
 
-The technical and scientific *documentation* for this repository can be found [here](https://andreabonvini.github.io/point-process/).
+The technical and scientific *documentation* for this repository can be found [here](https://andreabonvini.github.io/pointprocess/).
 
 # Contributing
 

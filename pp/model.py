@@ -125,5 +125,4 @@ class PointProcessDataset:
         uk = event_times[p + 1 :]
 
         eta = weights_producer(current_time - uk)
-
         return cls(xn, wn, p, eta, current_time, xt, target, wt)

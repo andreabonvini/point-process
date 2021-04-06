@@ -31,12 +31,6 @@ pipenv install <package-name>
 pipenv sync
 ```
 
-### Run `bin/` scripts:
-
-```
-pipenv run python bin/*.py
-```
-
 #### Tests:
 
 Only the functions which are contained in the `pp` module are tested with full coverage.
