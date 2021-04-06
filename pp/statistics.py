@@ -10,7 +10,7 @@ def compute_taus(
     """
     Args:
         lambdas (np.array): intantaneouus hazard-rate function for each time bini
-        events (njp.array): boolean array containing if an event occurred or not in a time bin
+        events (np.array): boolean array containing if an event occurred or not in a time bin
         delta (float): distance in time between two time bins.
 
     Returns:
@@ -39,7 +39,7 @@ def ks_distance(taus: np.ndarray, plot: bool = False):  # pragma: no cover
     d = len(z)
     lin = np.linspace(0, 1, d)
     if plot:
-        plt.figure(figsize=(10, 5))
+        plt.figure(figsize=(12, 8))
         lu = np.linspace(1.36 / np.sqrt(d), 1 + 1.36 / np.sqrt(d), d)
         ll = np.linspace(-1.36 / np.sqrt(d), 1 - 1.36 / np.sqrt(d), d)
         plt.plot(z, lin)

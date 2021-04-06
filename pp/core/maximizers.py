@@ -14,6 +14,8 @@ class InverseGaussianMaximizer:
         max_steps: int,
         theta0: Optional[np.ndarray] = None,
         k0: Optional[float] = None,
+        right_censoring: bool = False,
+        do_global: bool = False,
     ):
         """
             Args:
@@ -22,6 +24,8 @@ class InverseGaussianMaximizer:
                 theta0: is a vector of shape (p,1) (or (p+1,1) if teh dataset was created with the hasTheta0 option)
                  of coefficients used as starting point for the optimization process.
                 k0: is the starting point for the scale parameter (sometimes called lambda).
+                right_censoring: True if we want to apply right censoring.
+                do_global: True if we want to initialize the parameters through a global optimization procedure.
             Returns:
                 PointProcessModel
             """
@@ -34,6 +38,8 @@ class InverseGaussianMaximizer:
         likel_invgauss_consistency_check(
             self.dataset.xn, self.dataset.wn, self.dataset.xt, self.theta0
         )
+        self.right_censoring = right_censoring
+        self.do_global = do_global
 
     def train(self) -> InverseGaussianResult:
         """
@@ -49,12 +55,15 @@ class InverseGaussianMaximizer:
 
         """
 
+        mean_interval = float(
+            np.dot(self.dataset.eta.T, self.dataset.wn) / np.sum(self.dataset.eta)
+        )
         # TODO change initialization (maybe?)
         if self.theta0 is None:
-            self.theta0 = np.ones((self.m, 1)) / self.m
-            self.theta0[0] = float(np.mean(self.dataset.wn))
+            self.theta0 = np.ones((self.m, 1)) * 0.001
+            self.theta0[0] = mean_interval
         if self.k0 is None:
-            self.k0 = 1700.0
+            self.k0 = 1500.0
 
         xn = self.dataset.xn
         eta = self.dataset.eta
@@ -73,6 +82,8 @@ class InverseGaussianMaximizer:
             wn,
             xt,
             wt,
+            self.right_censoring,
+            self.do_global,
         )
         k = params[0]
         thetap = params[1:]
@@ -88,6 +99,6 @@ class InverseGaussianMaximizer:
             self.dataset.current_time,
             mu,
             sigma,
-            float(np.mean(wn)),
+            mean_interval,
             self.dataset.target,
         )

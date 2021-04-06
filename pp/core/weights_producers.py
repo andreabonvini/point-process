@@ -15,5 +15,6 @@ class ExponentialWeightsProducer:
         return self._compute_weights()
 
     def _compute_weights(self) -> np.ndarray:
-        p = np.exp(np.log(self.alpha) * self.target_distances).reshape(-1, 1)
-        return p / p[-1]  # p/sum(p) * len(self.target_distances)
+        p = np.exp(np.log(self.alpha) * self.target_distances)  # weights
+        # p = p / sum(p) * len(p)
+        return p.reshape(-1, 1)

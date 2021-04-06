@@ -4,9 +4,49 @@ import numpy as np
 from scipy.optimize import LinearConstraint
 from scipy.stats import norm
 
+# ------------------------------------------------------------------------------------------------------------
+# The following block of code is here just for testing purposes, the real computation for the negloglikelihood
+# happens in the c code in pp/optimized/c_regr_likel.c
+# ------------------------------------------------------------------------------------------------------------
+
+
+def igcdf(t: float, mu: float, k: float):  # pragma: no cover
+    if t == 0.0:
+        return 0.0
+    return norm.cdf(np.sqrt(k / t) * (t / mu - 1)) + np.exp(
+        (2 * k / mu) + norm.logcdf(-np.sqrt(k / t) * (t / mu + 1))
+    )
+
+
+def compute_invgauss_negloglikel_rc(
+    xk: np.ndarray, wt: float, rc_eta: float, xt: np.ndarray
+) -> float:
+    # Retrieve useful variable
+    k, thetap = xk[0], xk[1:]
+    thetap = thetap.reshape(-1, 1)
+    rc_mu = np.dot(xt, thetap)[0, 0]
+    return -rc_eta * np.log(1.0 - igcdf(wt, rc_mu, k))
+
+
+def compute_invgauss_negloglikel(
+    xk: np.ndarray, xn: np.ndarray, wn: np.ndarray, eta: np.ndarray,
+) -> float:
+    # Retrieve useful variables
+    k, thetap = xk[0], xk[1:]
+    thetap = thetap.reshape(-1, 1)
+    mus = np.dot(xn, thetap)
+    # Compute negative log-likelihood
+    arg = k / (2 * np.pi * wn ** 3)
+    logps = np.log(np.sqrt(arg)) - (k * (wn - mus) ** 2) / (2 * mus ** 2 * wn)
+    return -np.dot(eta.T, logps)[0, 0]
+
+
+# ------------------------------------------------------------------------------------------------------------
+
 
 class InverseGaussianConstraints:  # pragma: no cover
-    # FIXME This contrainsts are't actually forced by now. They're here just as a reminder on how that could be done..
+    # FIXME This constraints are't actually forced by now. (nlopt NEWTON method doesn't support linear constraints)
+    #  They're here just as a reminder on how that could be done..
     def __init__(self, xn: np.ndarray):
         """
         Args:
@@ -43,23 +83,6 @@ class InverseGaussianConstraints:  # pragma: no cover
             LinearConstraint(A_lambda, lb_lambda, ub_lambda),
             LinearConstraint(A_theta, lb_theta, ub_theta),
         ]
-
-
-def igcdf(t: float, mu: float, k: float):  # pragma: no cover
-    if t == 0.0:
-        return 0.0
-    return norm.cdf(np.sqrt(k / t) * (t / mu - 1)) + np.exp(
-        (2 * k / mu) + norm.logcdf(-np.sqrt(k / t) * (t / mu + 1))
-    )
-
-
-def igpdf(t: float, mu: float, k: float):  # pragma: no cover
-    if t == 0.0:
-        return 0.0
-    arg = k / (2 * np.pi * t ** 3)
-    return np.nan_to_num(
-        np.sqrt(arg) * np.exp((-k * (t - mu) ** 2) / (2 * mu ** 2 * t))
-    )
 
 
 def likel_invgauss_consistency_check(

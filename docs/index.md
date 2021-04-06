@@ -1,13 +1,7 @@
-# `point-process (pp)`
+![](images/ppbig.png)
 
-This site contains the *scientific* and `code ` documentation for [point-process](https://github.com/andreabonvini/point-process), a `python` library for *Point Process Analysis*.
+This site contains the *scientific* and `code ` documentation for [pointprocess](https://github.com/andreabonvini/pointprocess), a `Python` library for *Point Process Analysis*.
 
-`e.g. Real-time RR intervals distribution estimation:`
-
-<video width="600" height="400" controls>
-  <source src="https://andreabonvini.github.io/point-process/videos/RealTimeIG.mov" type="video/mp4">
-Your browser does not support the video tag.
-</video>
 
 The *scientific documentation* consists of a series of quick blog-posts explaining the theoretical details behind the algorithmic implementation.
 
@@ -28,160 +22,180 @@ The *scientific documentation* consists of a series of quick blog-posts explaini
 
 #### `Usage`
 
-```python
-from pp import InterEventDistribution, PointProcessDataset
-from pp import regr_likel
-# Suppose we have a np.array inter_events containing inter-event times expressed in seconds.
-# Build a dataset object with the specified AR order (p) and hasTheta0 option (if we want to account for the bias)
-dataset = PointProcessDataset.load(
-    inter_events_times=inter_events,
-    p=9,
-    hasTheta0=True
-)
-# We pass to regr_likel the dataset defined above and the distribution we want to fit 
-pp_model = regr_likel(dataset, InterEventDistribution.INVERSE_GAUSSIAN)
+Suppose we have a `np.ndarray` `events` which contains the time of a series of events.
 
-# We build the same dataset without the hasTheta0 option just to test our model:
-dataset = PointProcessDataset.load(
-    inter_events_times=inter_events,
-    p=9,
-    hasTheta0=False
-)
-test_data = dataset.xn
-targets = dataset.wn
-predictions = [pp_model(sample).mu for sample in test_data]
-# We can then plot our predictions against the actual targets...
+```python
+print(events)
+array([ 657.938,  658.875,  659.758,  ..., 1311.391, 1312.336,
+       1313.273])
 ```
 
-![](images/plot.png)
-
-#### `InterEventDistribution`
+We can visualize the inter-event intervals
 
 ```python
-class InterEventDistribution(Enum):
-    INVERSE_GAUSSIAN = "Inverse Gaussian"
-#TODO add more distributions...
+import numpy as np
+import matplotlib.pyplot as plt
+# Visualize the dataset
+plt.figure(figsize=(6,3),dpi = 150)
+plt.plot(np.diff(events),"b")
+plt.xlabel("Sample")
+plt.ylabel("Inter Event Time [s]")
 ```
 
-#### `WeightsProducers`
+<img src="images/inter-event-times.png" style="zoom:77%;" />
 
-In order to weight the samples of our dataset (e.g. giving more importance to more recent samples) we can supply `regr_likel`  with a third argument `weights_producer`.
+By visual inspection, we can select a segment that looks approximately stationary, for example the heart beats with indices $75$ to $300$.
+
+We can fit a known distribution (for this brief tutorial we we'll use the Inverse Gaussian distribution) by optimizing for the $\theta$ parameters (i.e. the AR coefficients for the estimate of the first moment of the IG distribution) and the scaling factor $k$ by means of the `regr_likel` function:
 
 ```python
-# regr_likel signature:
-def regr_likel(
-        dataset: PointProcessDataset,
-        maximizer_distribution: InterEventDistribution,
-        weights_producer: WeightsProducer = ExponentialWeightsProducer()
-) -> PointProcessModel:
+from pp.model import PointProcessDataset,InterEventDistribution
+from pp.regression import regr_likel
+# Build a PointProcessDataset object
+dataset = PointProcessDataset.load(events[75:300],p = 8) # p: AR order
+# Train the model and retrieve the result
+result = regr_likel(dataset,InterEventDistribution.INVERSE_GAUSSIAN,max_steps = 100)
 ```
 
-We have two types of `WeightsProducers`:
-
-- `ConstantWeightsProducer`: weights the samples by the same amount (i.e. `1`)
-
-- `ExponentialWeightsProducer`: weights the samples with a decreasing exponential function `w(t)=exp(-alpha*t)`
-
-	where `t` is the time distance from the most recent sample's target interval.
-
-	```python
-	class ExponentialWeightsProducer(WeightsProducer):
-	    def __init__(self, alpha: float = 0.005):
-	        """
-	        Args:
-	            alpha: Weighting time constant that governs the degree of influence
-	                    of a previous observation on the local likelihood.
-	        """
-	        self.alpha = alpha
-	
-	    def __call__(self, target_intervals: np.ndarray) -> np.ndarray:
-	        """
-	            Args:
-	                target_intervals:
-	                    Target intervals vector (as stored in PointProcessDataset.wn)
-	        """
-	        self.target_intervals = target_intervals
-	        return self._compute_weights()
-	
-	    def _compute_weights(self) -> np.ndarray:
-	        target_times = np.cumsum(self.target_intervals) - self.target_intervals[0]
-	        return np.exp(-self.alpha * target_times).reshape(-1, 1)[::-1]
-	 
-	```
+The returned object in this case in a `InverseGaussianResult`:
 
 ```python
-from pp import ExponentialWeightsProducer,ConstantWeightsProducer
-
-wp = ExponentialWeightsProducer(alpha = 0.01) # or ConstantWeightsProducer()
-pp_model = regr_likel(dataset, InterEventDistribution.INVERSE_GAUSSIAN, wp)
-```
-
-#### `PointProcessModel`
-
-The result from the `regr_likel()` function is a `PointProcessModel`, this kind of object contains, other than the actual model, information about the training process and the learnt parameters.
-
-```python
-class PointProcessModel:
-    def __init__(
-        self,
-        model: Callable[[np.ndarray], PointProcessResult],
-        expected_shape: tuple,
-        theta: np.ndarray,
-        k: float,
-        results: List[float],
-        params_history: List[np.ndarray],
-        distribution: InterEventDistribution,
-        ar_order: int,
-        hasTheta0: bool,
-    ):
-        """
+@dataclass
+class InverseGaussianResult:
+    """
         Args:
-            model: actual model which yields a PointProcessResult
-            expected_shape: expected input shape to feed the PointProcessModel with
             theta: final AR parameters.
             k: final shape parameter (aka lambda).
-            results: negative log-likelihood values obtained during the optimization process (should diminuish in time).
-            params_history: list of parameters obtained during the optimization process
-            distribution: fitting distribution used to train the model.
-            ar_order: AR order used to train the model
-            hasTheta0: if the model was trained with theta0 parameter
-        """
-        self._model = model
-        self.expected_input_shape = expected_shape
-        self.theta = theta
-        self.k = k
-        self.results = results
-        self.params_history = params_history
-        self.distribution = distribution
-        self.ar_order = ar_order
-        self.hasTheta0 = hasTheta0
+            current_time: current evaluatipon time
+            mu: final mu prediction for current_time.
+            sigma: final sigma prediction for current_time.
+            mean_interval: mean target interval, it is useful just 
+            	to compute the spectral components.
+            target: (Optional) expected mu prediction for current_time
+    """
 
-    def __repr__(self):
-        return (
-            f"<PointProcessModel<\n"
-            f"\t<model={self._model}>\n"
-            f"\t<expected_input_shape={self.expected_input_shape}>\n"
-            f"\t<distributuon={self.distribution}>\n"
-            f"\t<ar_order={self.ar_order}>\n"
-            f"\t<hasTheta0={self.hasTheta0}>\n"
-            f">"
-        )
-
-    def __call__(self, inter_event_times: np.ndarray) -> PointProcessResult:
-        return self._model(inter_event_times)
+    theta: np.ndarray
+    k: float
+    current_time: float
+    mu: float
+    sigma: float
+    mean_interval: float
+    target: Optional[float] = None
 ```
 
-#### `PointProcessResult`
-
-A call to a `PointProcessModel` yields a `PointProcessResult`
+So if we want compare our predictions for the first moment of the IG distribution with the target intervals we can proceed in the following way:
 
 ```python
-class PointProcessResult:
-    def __init__(self, mu, sigma):
-        self.mu = mu
-        self.sigma = sigma
-
-    def __repr__(self):
-        return f"mu: {self.mu}\nsigma: {self.sigma}"
+original_mus = dataset.wn
+predicted_mus = np.dot(dataset.xn,result.theta)
+plt.figure(figsize=shape,dpi = 150)
+plt.plot(original_mus,"r")
+plt.plot(predicted_mus,"b")
+plt.legend(["Target $\mu_s$","Predicted $\mu_s$"])
 ```
+
+<img src="images/regr_likel.png" style="zoom:67%;" />
+
+Once we have obtained the optimal parameters, we can compute a spectral analysis of the data:
+
+```python
+analysis = compute_psd(result.theta,result.mean_interval,result.k)
+# Plot the total power associated with each frequency
+plt.plot(analysis.frequencies,analysis.powers,"k--")
+# Plot the power associated with each single pole
+for component in analysis.comps:
+    plt.plot(analysis.frequencies,np.real(component))
+plt.xlabel("f[Hz]")
+plt.ylabel("PSD[ms$^2$/Hz]")
+```
+
+<img src="images/spec.png" style="zoom:77%;" />
+
+```python
+# We can aggregate complex conjugate by passing the argument aggregate=True
+analysis = compute_psd(result.theta,result.mean_interval,result.k,aggregate=True)
+# Plot the total power associated with each frequency
+plt.plot(analysis.frequencies,analysis.powers,"k--")
+# Plot the power associated with each single pole
+for component in analysis.comps:
+    plt.plot(analysis.frequencies,np.real(component))
+plt.xlabel("f[Hz]")
+plt.ylabel("PSD[ms$^2$/Hz]")
+```
+
+<img src="images/spec_agg.png" style="zoom:77%;" />
+
+If we want real-time estimates of the $\theta$ and $k$ parameters we can optimise by shiftting a moving window of length `window_length` by a little time step `delta` using the `regr_likel_pipeline` function.
+
+```python
+# If we specify a csv_path as argument, the function will automatically create this .csv for us containing all the useful information.
+# On the other hand if we don't supply the function with the csv_path, a list of InverseGaussianResult objects will be returned.
+csv_path = "test.csv"
+regr_likel_pipeline(
+    events,
+    ar_order=8,
+    window_length = 60,
+    delta=0.005,
+    csv_path = csv_path
+)
+```
+
+```
+🧠🫀Processing🫀🧠: 100%|##########| 119067/119067 [01:22<00:00, 1451.33it/s]
+Regression pipeline completed! 🎉🎉 csv file saved at: 'test.csv' 👌
+```
+
+We can then load the `csv` and assess goodness of fit by means of the `ks_distance` 
+
+```python
+import pandas as pd
+df = pd.read_csv(csv_path)
+
+delta = df["TIME_STEP"][1] - df["TIME_STEP"][0]
+events = np.array(df["EVENT_HAPPENED"])
+times = np.array(df["TIME_STEP"])
+mus = np.array(df["MU"])
+targets = np.array(df["TARGET"])
+lambdas = np.array(df["LAMBDA"])
+
+print(df.columns)
+```
+
+```
+>>> Index(['TIME_STEP', 'MEAN_WN', 'K', 'MU', 'SIGMA', 'LAMBDA', 'EVENT_HAPPENED',
+          'TARGET', 'THETA_0', 'THETA_1', 'THETA_2', 'THETA_3', 'THETA_4',
+          'THETA_5', 'THETA_6', 'THETA_7', 'THETA_8', 'THETA_9'],
+           dtype='object')
+```
+
+```python
+from pp.plot import ppplot,lambda_plot
+ppplot(times,mus,events,targets)
+```
+
+![](images/ppplot.png)
+
+```python
+taus = compute_taus(lambdas, events, delta)
+KSdistance = ks_distance(taus,plot = True)
+print(f"KSdistance: {KSdistance}")
+```
+
+<img src="images/ks_plot.png" style="zoom:87%;" />
+
+```
+>>> KSdistance: 0.050398
+```
+
+```python
+lambda_plot(lambdas)
+```
+
+<img src="images/lambdas.png" style="zoom:87%;" />
+
+```python
+lambda_plot(lambdas[3000:4000])
+```
+
+<img src="images/lambdas34.png" style="zoom:87%;" />
 
